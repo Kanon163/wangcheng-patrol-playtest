@@ -2,6 +2,7 @@
 const World = (() => {
   const T = THREE, canvas = document.querySelector('#scene');
   const renderer = new T.WebGLRenderer({canvas,antialias:true,alpha:false,powerPreference:'high-performance'});
+  window.patrolHost?.attachRenderer(renderer);
   renderer.setPixelRatio(Math.min(devicePixelRatio,1.7));
   const scene = new T.Scene(), camera = new T.OrthographicCamera();
   scene.background = new T.Color(0xadd8c9);

@@ -13,11 +13,12 @@ const colors={red:'珊瑚红',blue:'海水蓝',green:'青草绿'};
 let state='home', mode, p, objects=[], mobs=[], drops=[], fx=[], elapsed=0,left=0,kills=0,energy=100,hit=0,cool=0,spawn=0,beat=0, target=null, inspected=0, proofs=[], culprit, chase=null, combo=0,queued=null,now=0,toastUntil=0,tipUntil=0;
 let audio,joy=null,axis={x:0,y:0},keys=new Set(),bird=null,talentClock=0;
 function tone(freq=390,len=.08,kind='triangle',vol=.035){
+  if(window.patrolHost){if(save.sound)window.patrolHost.playTone(freq,vol);return}
   if(!save.sound||!audio||audio.state!=='running')return;
   const o=audio.createOscillator(),g=audio.createGain();o.type=kind;o.frequency.setValueAtTime(freq,audio.currentTime);o.frequency.exponentialRampToValueAtTime(Math.max(70,freq*.74),audio.currentTime+len);
   g.gain.setValueAtTime(vol,audio.currentTime);g.gain.exponentialRampToValueAtTime(.0001,audio.currentTime+len);o.connect(g);g.connect(audio.destination);o.start();o.stop(audio.currentTime+len)
 }
-function unlock(){if(!save.sound)return;try{audio ||=new(window.AudioContext||window.webkitAudioContext)();audio.resume().catch(()=>{})}catch{}}
+function unlock(){if(!save.sound||window.patrolHost)return;try{audio ||=new(window.AudioContext||window.webkitAudioContext)();audio.resume().catch(()=>{})}catch{}}
 function notice(s){$('toast').textContent=s;toastUntil=performance.now()+1500}
 function options(stamp,title,desc,choices){
   stopInput();$('stamp').textContent=stamp;$('dialogTitle').textContent=title;$('desc').textContent=desc;$('options').replaceChildren();
