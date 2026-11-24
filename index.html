@@ -1,0 +1,8 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1"><meta name="theme-color" content="#173c40"><link rel="icon" href="data:,"><title>汪！文明巡查队</title><link rel="stylesheet" href="style.css"></head>
+<body><main id="game"><canvas id="scene" aria-label="三维车站，点目的地前往，拖动控制小狗"></canvas><div id="marks"></div>
+<section id="home"><header><div class="station">汪城地铁　<span>✦</span>　巡查站</div><h1>汪！<br><strong>文明巡查队</strong></h1></header><nav><button class="mission" data-mode="search"><i>♫</i><span><b>寻找外放者</b><small>听声翻找</small></span><em>›</em></button><button class="mission" data-mode="rush"><i>✹</i><span><b>大闹站台</b><small>生存割草</small></span><em>›</em></button><button class="mission" data-mode="case"><i>？</i><span><b>谁在撒谎</b><small>搜证指认</small></span><em>›</em></button><div class="navfoot"><button id="shop">♢　装备与成长</button><button id="sound" aria-label="切换声音"></button></div></nav></section>
+<section id="hud" hidden><div class="top"><div class="objective"><small id="modeName"></small><b id="objective"></b></div><button id="pause" aria-label="暂停">Ⅱ</button></div><div class="bars"><b id="time"></b><span id="status"></span><span id="energy"><i></i></span></div><div id="hint"></div><div id="stick"><i></i></div><button id="act">调查</button></section>
+<section id="modal" hidden><article role="dialog" aria-modal="true" aria-labelledby="dialogTitle"><small id="stamp"></small><h2 id="dialogTitle"></h2><div id="desc"></div><div id="options"></div></article></section><div id="toast" role="status"></div></main>
+<script src="vendor/three.min.js"></script><script src="world.js"></script><script src="game.js"></script></body></html>
+
