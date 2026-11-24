@@ -8,7 +8,7 @@ const Districts=(()=>{
     office:['办公室','#bdc9c2','#62899d',['前台','工位区','茶水间'],['文件柜','书架','背包','花盆','长椅']]
   };
   const zones=[[-12,-7],[0,0],[12,7]],last={};
-  function choose(mode){const ids=Object.keys(catalog).filter(id=>id!==last[mode]);const id=mode==='home'?'park':ids[Math.floor(Math.random()*ids.length)];
+  function choose(mode){if(mode==='rush')return {id:'market',name:'汪顺老街',landmarks:Street.names};const ids=Object.keys(catalog).filter(id=>id!==last[mode]);const id=mode==='home'?'park':ids[Math.floor(Math.random()*ids.length)];
     if(mode!=='home')last[mode]=id;const [name,floor,accent,landmarks,items]=catalog[id];return {id,name,floor,accent,landmarks,items}}
   let solids=[];
   function clear(x,z){return Math.abs(x)<=22&&Math.abs(z)<=15&&!solids.some(([a,b,w,d])=>Math.abs(x-a)<w&&Math.abs(z-b)<d)}
@@ -31,8 +31,9 @@ const Districts=(()=>{
     }
     const path=[];while(last!==start){path.push(point(last));last=seen[last]}return path.reverse()
   }
-  function build(g,d,{cube,ball,cyl,bench,plant,label},home){
+  function build(g,d,{cube,ball,cyl,bench,plant,label,makeBuilding},home){
     solids=[];const block=(x,z,w,d)=>solids.push([x,z,w/2+.17,d/2+.17]);
+    if(d.id==='market'){Street.layout(g,{cube,ball,cyl,label},block,makeBuilding);return}
     const box=(...v)=>cube(g,...v),round=(...v)=>ball(g,...v),post=(...v)=>cyl(g,...v),sign=(...v)=>label(g,...v);
     const {id,floor,accent}=d, ink='#344b4c',white='#fff1ce';
     box('#577267',0,-.26,0,48,.48,34);box(floor,0,-.055,0,48,.09,34);

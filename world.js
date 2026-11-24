@@ -33,7 +33,7 @@ const World = (() => {
       const mesh=new T.Mesh(g,mat);mesh.userData.baked=true;group.add(mesh)
     }
   }
-  function dispose(root){root.traverse(o=>{if(o.userData.baked)o.geometry.dispose();if(o.userData.rigged)o.skeleton.dispose()});root.removeFromParent()}
+  function dispose(root){root.traverse(o=>{if(o.userData.baked)o.geometry.dispose();if(o.userData.ownMat)o.material.dispose();if(o.userData.rigged)o.skeleton.dispose()});root.removeFromParent()}
   function sign(text,bg,fg){
     const key=text+bg+fg;if(signMats.has(key))return signMats.get(key);
     const c=document.createElement('canvas');c.width=512;c.height=128;const p=c.getContext('2d');
@@ -44,11 +44,34 @@ const World = (() => {
   const shadowGeo=new T.CircleGeometry(1,40),shadowMat=new T.MeshBasicMaterial({color:'#344538',transparent:true,opacity:.19,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-1});
   function shadow(g,x,z,w,d){const disc=new T.Mesh(shadowGeo,shadowMat);disc.rotation.x=-Math.PI/2;disc.scale.set(w,d,1);disc.position.set(x,.038,z);g.add(disc)}
   let stage=grp(scene),actors=grp(scene),dog,rig,hammer,home=true,t=0,district,look='shiba',clothes={};
+  let buildings=[],stroke,stamp;
+  function goal(index){if(!stamp)return;stamp.visible=index<3;if(stamp.visible){const [x,z]=Street.nodes[Street.checkpoints[index]];stamp.position.set(x,.095,z)}}
+  function makeBuilding(x,z,w,d,h,id,[name,accent]){
+    const b=grp(stage);b.position.set(x,0,z);buildings.push({b,x,z,w,d,h});
+    cube(b,'#977e6c',0,h/2,0,w,h,d);
+    const front=Cels.material('shop-'+id);
+    const facade=(width,xx,zz,rot)=>{const m=new T.Mesh(new T.PlaneGeometry(width,h),front);m.userData.baked=true;m.rotation.y=rot;m.position.set(xx,h/2,zz);b.add(m)};
+    facade(w,0,d/2+.012,0);facade(d,w/2+.012,0,Math.PI/2);
+    cube(b,'#53675e',0,h+.04,0,w+.20,.13,d+.18);cube(b,'#aa9a76',0,h+.15,0,w-.1,.14,d-.1);
+    cube(b,accent,0,h*.51,d*.5+.14,w+.13,.14,.55);label(b,name,0,h*.64,d*.5+.05,w*.63,.43,accent,'#fff0ca');
+    const roof=id%2?'#997665':'#82928a';
+    for(let k=0;k<5;k++)cube(b,roof,0,h+.228,-d*.4+k*d*.2,w-.20,.04,.045);
+    cube(b,'#7c8884',-w*.27,h+.40,-d*.18,.83,.46,.70);
+    for(let k=0;k<4;k++)cube(b,'#495b59',-w*.27-.26+k*.17,h+.642,-d*.18,.08,.036,.55);
+    if(id%2===0){cube(b,'#536566',w*.25,h+.33,-d*.15,1.07,.19,.78);cube(b,'#a3bfbd',w*.25,h+.45,-d*.15,.87,.08,.57)}
+    else{cyl(b,'#b5a188',w*.25,h+.60,-d*.15,.41,.88,.41);cyl(b,'#677974',w*.25,h+1.05,-d*.15,.45,.09,.45)}
+    bake(b)
+  }
+  function pedestrian(id){const g=grp(actors);shadow(g,0,0,.37,.26);const card=Cels.actor(id,2.12);g.add(card);face(card);g.userData.paper=card;
+    const form=new T.Shape();for(let i=0;i<16;i++){const a=i*Math.PI/8,r=i%2?.20:(i%4?.42:.66);if(!i)form.moveTo(r,0);else form.lineTo(Math.cos(a)*r,Math.sin(a)*r)}form.closePath();
+    const spark=new T.Mesh(new T.ShapeGeometry(form),material('#ffe48b'));spark.userData.baked=true;card.add(spark);spark.position.set(-.27,1.01,.09);spark.visible=false;g.userData.spark=spark;return g}
+  function pedestrianPose(m,frame,flash,shake,spark){const card=m.mesh.userData.paper;Cels.frame(card,frame,flash);card.scale.x=m.facing||1;
+    card.position.x=shake*.075;card.userData.card.rotation.z=shake*.038;m.mesh.userData.spark.visible=spark}
   function person(color,item,variant=0){return citizen(Paper.behaviors[3+({red:0,blue:1,green:2}[color]??variant%3)])}
   function citizen(id){const g=grp(actors);shadow(g,0,0,.37,.28);const paper=Paper.npc(id);g.add(paper);g.userData.paper=paper;face(paper);return g}
   function face(card){card.quaternion.copy(camera.quaternion)}
   function outfit(breed,wear){look=Paper.breeds[breed]?breed:'shiba';clothes=wear||{};if(!dog)return;
-    if(rig)dispose(rig.g);rig=Paper.dog(look,clothes);dog.add(rig.g);face(rig.g);hammer=null}
+    if(rig)dispose(rig.g);rig=district?.id==='market'?Cels.dog(look,clothes):Paper.dog(look,clothes);dog.add(rig.g);face(rig.g);hammer=null}
   function bench(g,x,z){
     for(let i=-1;i<=1;i++){cube(g,teal,x+i*.64,.50,z,.58,.13,.53);cube(g,'#42a99b',x+i*.64,.75,z-.24,.58,.48,.1)}
     for(const a of [-.63,.63])cube(g,ink,x+a,.23,z,.09,.46,.32)
@@ -57,9 +80,14 @@ const World = (() => {
     for(let i=0;i<6;i++){const a=i*1.15;const l=ball(g,i%2?'#5b9b58':'#39816b',x+Math.cos(a)*.19,.68+i%2*.15,z+Math.sin(a)*.15,.13,.34,.12);l.rotation.z=Math.sin(a)*.65}}
   function buildStage(mode){
     dispose(stage);dispose(actors);stage=grp(scene);actors=grp(scene);home=mode==='home';
-    district=Districts.choose(mode);Districts.build(stage,district,{cube,ball,cyl,bench,plant,label},home);bake(stage);
+    buildings=[];stroke=null;stamp=null;district=Districts.choose(mode);Districts.build(stage,district,{cube,ball,cyl,bench,plant,label,makeBuilding},home);bake(stage);
     dog=grp(actors);shadow(dog,0,0,.50,.35);rig=null;outfit(look,clothes);
-    if(home)dog.scale.setScalar(1.58);return district
+    if(home)dog.scale.setScalar(1.58);
+    if(mode==='rush'){stamp=grp(actors);
+      for(const [inner,outer,color] of [[1.25,1.49,'#264c4c'],[1.31,1.43,'#ffd465']]){
+        const ring=new T.Mesh(new T.RingGeometry(inner,outer,44),new T.MeshBasicMaterial({color,side:T.DoubleSide}));ring.rotation.x=-Math.PI/2;ring.position.y=inner*.01;ring.userData.baked=ring.userData.ownMat=true;stamp.add(ring)}
+      goal(0);stroke=new T.Mesh(new T.RingGeometry(.89,1.02,21,1,-.75,2.25),new T.MeshBasicMaterial({color:'#ffe9a6',side:T.DoubleSide,transparent:true,opacity:.85,depthWrite:false}));stroke.userData.baked=true;stroke.userData.ownMat=true;rig.g.add(stroke);stroke.position.set(.20,.89,.05);stroke.visible=false}
+    return district
   }
   function prop(kind,colorIndex){
     const g=grp(actors), c=['#e1a642','#49a297','#dc745a','#6287b2','#a180ac'][colorIndex%5];shadow(g,0,0,.52,.41);
@@ -72,7 +100,7 @@ const World = (() => {
   function place(mesh,x,z){mesh.position.x=x;mesh.position.z=z;return mesh}
   const focus=new T.Vector3(), camDir=new T.Vector3(8,13,10).normalize(),screenPos=new T.Vector3(),ray=new T.Raycaster(),plane=new T.Plane(new T.Vector3(0,1,0),0);
   function cameraUpdate(dt){
-    const w=innerWidth,h=innerHeight,ratio=w/h;const height=home?(ratio>1.2?6.1:Math.max(6.6,3.2/ratio)):Math.max(7.5,6.7/ratio);
+    const w=innerWidth,h=innerHeight,ratio=w/h;const height=home?(ratio>1.2?6.1:Math.max(6.6,3.2/ratio)):(district?.id==='market'?Math.max(9.8,9.0/ratio):Math.max(7.5,6.7/ratio));
     let fx=home?(ratio>1.2?1.5:0):dog.position.x, fz=home?0:dog.position.z;
     focus.lerp(new T.Vector3(fx,home?1.33:.5,fz),dt>=1?1:1-Math.exp(-dt*5));
     camera.left=-height*ratio/2;camera.right=-camera.left;camera.top=height/2;camera.bottom=-height/2;camera.near=.1;camera.far=110;
@@ -82,15 +110,22 @@ const World = (() => {
   function ground(x,y){ray.setFromCamera({x:x/innerWidth*2-1,y:1-y/innerHeight*2},camera);const p=new T.Vector3();ray.ray.intersectPlane(plane,p);return p}
   function resize(){renderer.setSize(innerWidth,innerHeight,false);if(dog)cameraUpdate(1)}
   addEventListener('resize',resize);resize();
-  function animate(dt,p,moving,swing,weapon){
+  function animate(dt,p,moving,swing,weapon,combat){
     t+=dt;if(!home)place(dog,p.x,p.z);
     cameraUpdate(dt);face(rig.g);
     if(moving){const vx=Math.sin(p.yaw)*.78-Math.cos(p.yaw)*.625;if(Math.abs(vx)>.12)rig.g.scale.x=Math.sign(vx)}
-    Paper.pose(rig,t,moving,swing,home);renderer.render(scene,camera)
+    if(rig.cels){
+      Cels.dogPose(rig,t,moving,combat?.step);stroke.visible=combat?.step===5||combat?.step===6;stroke.rotation.z=combat?.step===5?.86:-.53;
+      if(combat?.direction)rig.g.scale.x=combat.direction;
+      const shake=combat?.shake||0;if(shake){camera.position.x+=shake*.065;camera.position.z-=shake*.043;camera.updateMatrixWorld()}
+      for(const {b,x,z,w,d,h} of buildings){const dx=x-p.x,dz=z-p.z,depth=.625*dx+.781*dz;
+        const occluding=depth>0&&depth<h+3&&Math.abs(dx*.781-dz*.625)<w*.36+d*.29+.32;
+        b.scale.y+=((occluding?.24:1)-b.scale.y)*(1-Math.exp(-dt*16))}
+    }else Paper.pose(rig,t,moving,swing,home);renderer.render(scene,camera)
   }
   function equip(name){const colors=name==='黄瓜棒'?['#458755','#8bb756']:name==='糖葫芦'?['#b52a3e','#f17a50']:['#cf5147','#ffcb4a'];
     // Keep the handle, replace the head with the selected silhouette.
-    if(hammer)dispose(hammer);hammer=grp(rig.hand);hammer.position.set(.20,-.30,.06);hammer.scale.setScalar(.66);hammer.rotation.z=-.68;cube(hammer,'#704630',0,.26,0,.09,.65,.09);
+    if(hammer)dispose(hammer);hammer=grp(rig.hand);if(rig.cels){hammer.position.set(0,-.09,.025);hammer.scale.setScalar(1.28)}else{hammer.position.set(.20,-.30,.06);hammer.scale.setScalar(.66);hammer.rotation.z=-.68}cube(hammer,'#704630',0,.26,0,.09,.65,.09);
     if(name==='糖葫芦'){for(let i=0;i<3;i++)ball(hammer,colors[i%2],0,.49+i*.16,0,.117,.115,.115)}
     else if(name==='黄瓜棒'){ball(hammer,colors[0],0,.62,0,.12,.35,.12);for(let i=0;i<3;i++)ball(hammer,colors[1],.095,.48+i*.13,.03,.035,.035,.035)}
     else{cube(hammer,colors[0],0,.63,0,.49,.26,.28);for(const x of [-.25,.25])cube(hammer,colors[1],x,.63,0,.085,.31,.32)}
@@ -102,8 +137,5 @@ const World = (() => {
     for(const s of [-1,1]){ball(g,ink,s*.09,.19,.31,.025,.03,.02);ball(g,'#8bd5ce',s*.22,.015,-.03,.16,.06,.16)}
     bake(g);return g
   }
-  function hitsPaper(m,x,y){const q=project(m.x,0,m.z),height=innerHeight*1.72/(camera.top-camera.bottom);
-    const ratio=m.mesh.userData.paper.children[0].geometry.parameters.width/1.7;
-    return Math.abs(q.x-x)<Math.max(14,height*ratio*.50)&&y>=q.y-height-3&&y<=q.y+4}
-  return {hitsPaper,buildStage,outfit,citizen,person,prop,bird,place,dispose,project,ground,animate,equip,snap:()=>cameraUpdate(1),right:{x:10/Math.sqrt(164),z:-8/Math.sqrt(164)},down:{x:8/Math.sqrt(164),z:10/Math.sqrt(164)}}
+  return {goal,pedestrian,pedestrianPose,buildStage,outfit,citizen,person,prop,bird,place,dispose,project,ground,animate,equip,snap:p=>{if(p)place(dog,p.x,p.z);cameraUpdate(1)},right:{x:10/Math.sqrt(164),z:-8/Math.sqrt(164)},down:{x:8/Math.sqrt(164),z:10/Math.sqrt(164)}}
 })();

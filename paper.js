@@ -44,5 +44,5 @@ const Paper = (() => {
     b[4].rotation.z=pop*1.8+(home&&Math.sin(t*.9)>.5?.65+Math.sin(t*11)*.22:walk?-s*.3:0);
     b[5].rotation.z=walk?s*.29:.02;b[6].rotation.z=walk?-s*.29:-.02
   }
-  return {dog,npc,pose,breeds,gear,behaviors}
+  return {accessory:sheet,dog,npc,pose,breeds,gear,behaviors}
 })();
