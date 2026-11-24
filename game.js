@@ -33,20 +33,13 @@ function close(){ $('modal').hidden=true; }
 function clearMarks(){for(const o of [...objects,...fx,...drops])o.el?.remove();objects=[];mobs=[];drops=[];fx=[];chase=null;target=null;queued=null;$('marks').replaceChildren()}
 function home(){
   clearMarks();stopInput();close();state='home';$('home').hidden=false;$('hud').hidden=true;$('toast').textContent='';
-  W.buildStage('home');W.outfit(save.breed,save.wear);W.equip(save.weapon);W.snap();$('sound').textContent=save.sound?'◖ 声音开':'◌ 声音关'
+  W.buildStage('home');W.outfit(save.breed,{});W.equip(save.weapon);W.snap();$('sound').textContent=save.sound?'◖ 声音开':'◌ 声音关'
 }
-function dressed(){persist();W.outfit(save.breed,save.wear);W.equip(save.weapon)}
+function dressed(){persist();W.outfit(save.breed,{});W.equip(save.weapon)}
 function locker(){options('汪城巡查队','我的巡查员',Paper.breeds[save.breed]+'　·　钱包 '+save.coins+' 金币',[
-  ['选择小狗',breeds],['换装衣柜',wardrobe],['武器与成长',shop],['返回主页',close]])}
+  ['选择小狗',breeds],['武器与成长',shop],...sidebarActions(),['返回主页',close]])}
 function breeds(){options('巡查队员','选择小狗','四位队员都可以直接出勤。',Object.entries(Paper.breeds).map(([id,name])=>[
   (save.breed===id?'✓ ':'')+name,()=>{save.breed=id;dressed();close();notice(name+'出勤！')},false,id]).concat([['返回',locker]]))}
-function wardrobe(){options('纸片衣柜','穿戴与购买','钱包 '+save.coins+' 金币　·　薄荷领巾已赠送',Object.entries(Paper.gear).map(([id,[name,slot,cost]])=>{
-  const owned=save.wardrobe.includes(id),on=save.wear[slot]===id;
-  return [(on?'卸下 ':owned?'穿戴 ':'')+name+(owned?'':' · '+cost+' 金币'),()=>{
-    if(!owned){if(save.coins<cost)return;save.coins-=cost;save.wardrobe.push(id)}
-    if(on)delete save.wear[slot];else save.wear[slot]=id;dressed();wardrobe()
-  },!owned&&save.coins<cost,id]
-}).concat([['穿好出勤',close],['返回',locker]]))}
 function shop(){
   const offers=[['玩具锤',0,'横扫'],['黄瓜棒',9,'攻速快'],['糖葫芦',15,'范围大']];
   const choices=offers.map(([name,price,detail])=>[save.weapon===name?'✓ '+name+' · '+detail:save.owned.includes(name)?'装备 '+name:name+' · '+price+' 金币 · '+detail,()=>{
@@ -244,8 +237,9 @@ function placeMarks(dt){
   for(const f of fx){f.age+=dt;const q=W.project(f.x,f.height+f.age*.75,f.z);f.el.style.left=q.x+'px';f.el.style.top=q.y+'px';f.el.style.opacity=Math.min(1,(f.life-f.age)*4);if(f.age>=f.life)f.el.remove()}
   fx=fx.filter(f=>f.age<f.life)
 }
+function sidebarActions(){const sidebar=window.patrolHost?.sidebar;return sidebar?.available?[['去抖音侧边栏',()=>sidebar.open()]]:[]}
 function pause(){
-  if(state!=='play')return;state='pause';options('巡查暂停',modes[mode][0],mode==='case'&&proofs.length?proofs.join('\n'):'拖动走路，或点地面前往。电脑也可用方向键和空格。',[['继续巡查',resume],['重新开始',()=>begin(mode)],['返回主页',home]])
+  if(state!=='play')return;state='pause';options('巡查暂停',modes[mode][0],mode==='case'&&proofs.length?proofs.join('\n'):'拖动走路，或点地面前往。电脑也可用方向键和空格。',[['继续巡查',resume],['重新开始',()=>begin(mode)],...sidebarActions(),['返回主页',home]])
 }
 const scene=$('scene');
 scene.onpointerdown=e=>{if(joy||state!=='play')return;unlock();scene.setPointerCapture(e.pointerId);joy={id:e.pointerId,x:e.clientX,y:e.clientY,drag:false}}
@@ -277,5 +271,8 @@ let last=performance.now();function loop(ts){
   W.animate(state==='home'||state==='play'?dt:0,p,moving,Math.min(1,hit/.38),save.weapon,mode==='rush'?{step:strike?(strike.age<.065?4:strike.age<.125?5:strike.age<.25?6:7):null,direction:strike?Math.sign(Math.sin(strike.yaw)*W.right.x+Math.cos(strike.yaw)*W.right.z):0,shake:impactPulse*Math.sin(ts*.098)*4}:null);if(state!=='home')placeMarks(state==='play'?dt:0);
   if(ts>toastUntil&&$('toast').textContent)$('toast').textContent='';requestAnimationFrame(loop)
 }
-home();requestAnimationFrame(loop)
+const startMode=window.patrolHost ? window.patrolHost.startMode : new URLSearchParams(window.location.search).get('level');
+home();
+if(startMode==='rush')begin('rush');
+requestAnimationFrame(loop)
 })();
