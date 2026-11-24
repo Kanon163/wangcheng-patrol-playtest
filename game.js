@@ -103,7 +103,20 @@ function finish(win){
   const next=mode==='search'?'rush':mode==='rush'?'case':'search';
   const title=win?(mode==='rush'?'站台清静啦！':mode==='search'?'外放者戴上了耳机！':'插队者乖乖排队！'):'末班车开走了';
   const result=mode==='rush'?'这一班制止了 '+kills+' 次喧闹。':win?'用时 '+Math.ceil(elapsed)+' 秒。':'线索重新洗牌，再巡查一次。';
-  options('巡查结算',title,result+'\n本次金币 +'+earned+'　钱包 '+save.coins,[['下一站 · '+modes[next][0],()=>begin(next)],['再玩这关',()=>begin(mode)],['返回车站',home]])
+  const choices=[['下一站 · '+modes[next][0],()=>begin(next)],['再玩这关',()=>begin(mode)],['返回车站',home]];
+  let bonus=false,pending=false;
+  function receipt(){
+    const actions=[...choices];
+    if(earned>0&&window.patrolHost?.watchReward&&!bonus)actions.push(['▶ 看广告再领 '+earned+' 金币',async()=>{
+      if(pending||bonus)return;pending=true;
+      options('巡查结算','广告加载中','完成后可领取额外金币。',[]);
+      try{if(await window.patrolHost.watchReward()){bonus=true;save.coins+=earned;persist()}else notice('已保留基础金币')}
+      catch{notice('广告暂不可用，基础金币已保留')}
+      finally{pending=false;receipt()}
+    }]);
+    options('巡查结算',title,result+'\n本次金币 +'+earned+(bonus?'　广告奖励 +'+earned:'')+'　钱包 '+save.coins,actions)
+  }
+  receipt()
 }
 function addMob(){
   if(mobs.length>=15)return;let x,z;
