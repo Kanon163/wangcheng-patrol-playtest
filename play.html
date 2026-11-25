@@ -26,10 +26,19 @@
 .command{font-size:23px;color:#ffde73;transform:translate(-50%,-70%)}
 
 #options:has([data-art="scooter"]){grid-template-columns:1fr}#options button[data-art="scooter"]{height:auto;min-height:50px;background-position:12px center;background-size:40px auto;padding:8px 8px 8px 50px}
+
+#hint:empty{display:none}
+.bars{gap:5px;flex-wrap:wrap;font-variant-numeric:tabular-nums}
+.bars #time,.bars #charge{font-size:clamp(16px,4.4vw,21px);line-height:1.15;padding:5px 8px;border:2px solid #224746;color:#fff1ae;background:#234142}
+.bars #charge{color:#a6f6da}
+.bars [data-low="true"]:is(#time,#charge){background:#982f24;color:#fff;border-color:#ffd5a7}
+.bars [data-low="true"]::before{content:"! ";font-weight:900}
+.bars #energy{display:none}
+#hint{top:calc(max(12px,env(safe-area-inset-top)) + 105px)}
 </style></head>
 <body><main id="game"><canvas id="scene" aria-label="汪城街区，点目的地前往，拖动控制小狗"></canvas><div id="marks"></div>
 <section id="home" hidden><header><div class="station">汪城街区　<span>✦</span>　巡查站</div><h1>汪！<br><strong>文明巡查队</strong></h1></header><nav aria-label="选择巡查员"><div class="pick"><b>选择狗狗</b><div id="dogs" role="group" aria-label="巡查员"></div></div><button id="start">开始游戏 <span>➜</span></button><div class="navfoot"><button id="shop">武器与成长</button><button id="settings">设置</button></div></nav></section>
-<section id="hud" hidden><div class="top"><div class="objective"><small id="modeName"></small><b id="objective"></b></div><button id="pause" aria-label="暂停">Ⅱ</button></div><div class="bars"><b id="time"></b><span id="status"></span><span id="energy"><i></i></span></div><div id="hint"></div><div id="stick"><i></i></div><button id="act" aria-label="挥锤"></button></section>
+<section id="hud" hidden><div class="top"><div class="objective"><small id="modeName"></small><b id="objective"></b></div><button id="pause" aria-label="暂停">Ⅱ</button></div><div class="bars"><b id="time"></b><b id="charge"></b><span id="status"></span><span id="energy"><i></i></span></div><div id="hint"></div><div id="stick"><i></i></div><button id="act" aria-label="挥锤"></button></section>
 <section id="modal"><article role="dialog" aria-modal="true" aria-labelledby="dialogTitle"><small id="stamp"></small><h2 id="dialogTitle">正在打开巡查站</h2><div id="desc"></div><div id="options"></div></article></section><div id="toast" role="status"></div></main>
 <script>
 (function(){
@@ -189,6 +198,21 @@ const Street=(()=>{
   const nodes=[],edges=[],links=[],roads=[],checkpoints=[];
   const names=['早点铺','唱片巷','果栏口','戏院街','修车铺','茶楼后巷','南市口','西牌坊'];
   const shops=[['早点铺','#b85739'],['海风唱片','#307575'],['阿娟果栏','#548352'],['红星戏院','#a74f55'],['单车修理','#526f88'],['顺记茶楼','#448374']];
+  // 每组是同一片街区的两种业态，分布在街区两侧。
+  const districts=[
+    ['汪顺老街','market','#91a98b','#737d7e','#d9bfa0',2.35,[0],['早点铺','果栏','茶楼'],['唱片行','戏院','修车铺']],
+    ['滨河码头','quay','#7faeb3','#a29175','#d9caa0',2.18,[5,6,7,8,9],['渡口','船务站','候船室'],['观潮亭','水文站','游船屋']],
+    ['科创园区','office','#91afa7','#657686','#d2dce1',2.65,[2,7,12,17,12,11],['研发楼','实验楼','测试中心'],['会议中心','接待厅','展览厅']],
+    ['旧厂货运街','works','#a69c85','#766e67','#cab084',2.57,[5,6,7,8,9,14,13,12,11,10],['装配间','机修间','动力房'],['转运站','货仓','装卸站']],
+    ['桂花里巷','homes','#91aa75','#91877f','#e5ccb1',2.08,[6,7,12,11,10],['桂花一舍','邻里公寓','梧桐里'],['社区书屋','活动室','卫生站']],
+    ['青禾校园','school','#83aa85','#a16653','#e4d9bb',2.32,[6,7,8,13,12,11,6],['教学楼','图书馆','科学楼'],['体育馆','器材室','艺术楼']]
+  ];
+  const doors=[],porches=[],walkable=[],deck=[];let theme=0,split=0,flip=false;
+  function nextDistrict(){
+    if(!deck.length){const options=districts.map((_,i)=>i);while(options.length)deck.push(options.splice(Math.floor(Math.random()*options.length),1)[0]);
+      if(deck.length>1&&deck[deck.length-1]===theme)[deck[0],deck[deck.length-1]]=[deck[deck.length-1],deck[0]]}
+    theme=deck.pop();return districts[theme][0]
+  }
   const quotas=[1,1,1,2,2,2,3,3],incidents=[3,4,5,0,1,2];
   const random=(min,max)=>min+Math.random()*(max-min),pick=a=>a[Math.floor(Math.random()*a.length)];
   function connect(a,b){edges.push([a,b]);links[a].push(b);links[b].push(a)}
@@ -199,11 +223,14 @@ const Street=(()=>{
     return d
   }
   function generate(){
-    for(const list of [nodes,edges,links,roads,checkpoints])list.length=0;
+    for(const list of [nodes,edges,links,roads,checkpoints,doors,porches,walkable])list.length=0;
     const xs=[-18,-9,0,9,18].map(x=>x+random(-.7,.7)),zs=[-11.7,-4,4,11.7].map(z=>z+random(-.55,.55));
-    const ids=[Math.floor(random(0,20))],count=Math.floor(random(11,16));
+    const template=districts[theme][6],mirror=Math.random()<.5,reverse=Math.random()<.5;split=random(-2,2);flip=Math.random()<.5;
+    const seed=template.map(n=>(reverse?3-Math.floor(n/5):Math.floor(n/5))*5+(mirror?4-n%5:n%5));
+    const ids=[theme?seed[0]:Math.floor(random(0,20))],count=Math.floor(random(11,16));
     function insert(id){nodes.push([xs[id%5],zs[Math.floor(id/5)]]);links.push([])}
     insert(ids[0]);
+    if(theme)for(let i=1;i<seed.length;i++){const id=seed[i],parent=ids.indexOf(seed[i-1]);if(!ids.includes(id)){insert(id);ids.push(id)}const j=ids.indexOf(id);if(adjacent(seed[i-1]).includes(id)&&!links[parent].includes(j))connect(parent,j);else if(!links[j].length)connect(ids.indexOf(adjacent(id).find(n=>ids.includes(n))),j)}
     while(ids.length<count){
       const options=[];ids.forEach((id,i)=>{for(const next of adjacent(id))if(!ids.includes(next))options.push([i,next])});
       const [parent,id]=pick(options);insert(id);connect(parent,ids.length);ids.push(id)
@@ -216,23 +243,25 @@ const Street=(()=>{
       const cost=i=>Math.abs(desired-d[i]),best=Math.min(...available.map(cost));at=pick(available.filter(i=>cost(i)===best));checkpoints.push(at);visited.add(at)
     }
     for(const [a,b] of edges){
-      const [x,z]=nodes[a],[u,v]=nodes[b],half=random(2.22,2.65);
+      const [x,z]=nodes[a],[u,v]=nodes[b],half=districts[theme][5]+random(-.12,.13);
       roads.push({x:(x+u)/2,z:(z+v)/2,hx:Math.abs(x-u)/2+half,hz:Math.abs(z-v)/2+half,half,horizontal:z===v})
     }
   }
-  function contains(x,z,padding=0){return roads.some(r=>Math.abs(x-r.x)<=r.hx-padding&&Math.abs(z-r.z)<=r.hz-padding)}
+  function contains(x,z,padding=0){return walkable.some(r=>Math.abs(x-r.x)<=r.hx-padding&&Math.abs(z-r.z)<=r.hz-padding)}
   function neighbor(i,previous){const choices=links[i].filter(j=>j!==previous);return choices.length?pick(choices):links[i][0]}
   function layout(g,{cube,ball,cyl,label},block,makeBuilding){
     generate();
+    walkable.push(...roads);
     const box=(...v)=>cube(g,...v),post=(...v)=>cyl(g,...v);
-    box('#91a98b',0,-.42,0,132,.65,106);
+    const [,kind,ground,paving,kerb]=districts[theme];
+    box(ground,0,-.42,0,132,.65,106);
     for(const r of roads){
-      const w=r.hx*2,d=r.hz*2;box('#d9bfa0',r.x,-.036,r.z,w,.09,d);
+      const w=r.hx*2,d=r.hz*2;box(kerb,r.x,-.036,r.z,w,.09,d);
     }
     for(const [i,[a,b]] of edges.entries()){
       const r=roads[i],[ax,az]=nodes[a],[bx,bz]=nodes[b],length=Math.hypot(ax-bx,az-bz);
       const w=r.horizontal?length+3:2*r.half-1.15,d=r.horizontal?2*r.half-1.15:length+3,y=.018+(i%4)*.002;
-      box('#737d7e',r.x,y,r.z,w,.024,d);StreetArt.plane(g,'asphalt',r.x,y+.014,r.z,w,d,3.8);
+      box(paving,r.x,y,r.z,w,.024,d);if(!theme)StreetArt.plane(g,'asphalt',r.x,y+.014,r.z,w,d,3.8);
       for(let along=-length/2+2.65;along<length/2-1.9;along+=2.65){
         box('#eac78b',r.x+(r.horizontal?along:0),.056,r.z+(r.horizontal?0:along),r.horizontal?1:.07,.012,r.horizontal?.07:1)
       }
@@ -247,18 +276,39 @@ const Street=(()=>{
       return roads.every(r=>Math.abs(x-r.x)>w/2+r.hx+.08||Math.abs(z-r.z)>d/2+r.hz+.08)&&
         lots.every(l=>Math.abs(x-l.x)>(w+l.w)/2+.25||Math.abs(z-l.z)>(d+l.d)/2+.25)
     }
+    function build(x,z,w,d,h,id,landmark){
+      const section=(x+z*.35>split)!==flip?7:8;
+      const name=pick(districts[theme][section]);if(!theme)id=pick(section===7?[0,2,5]:[1,3,4]);
+      const colors=['#437e77','#32727e','#447399','#995e36','#91805e','#af5944'];
+      makeBuilding(x,z,w,d,h,id,theme?[name,colors[theme]]:shops[id],landmark,kind);
+      const options=[];
+      for(const [dx,dz] of [[1,0],[-1,0],[0,1],[0,-1]]){
+        const fx=x+dx*w/2,fz=z+dz*d/2,tx=fx+dx*1.04,tz=fz+dz*1.04;
+        if(Math.abs(tx)>21.7||Math.abs(tz)>14.7)continue;
+        for(let n=0;n<3;n+=.20){const ax=tx+dx*n,az=tz+dz*n;
+          if(roads.some(r=>Math.abs(ax-r.x)<r.hx-.5&&Math.abs(az-r.z)<r.hz-.5)){
+            options.push({dx,dz,fx,fz,x:tx,z:tz,ax,az,n});break}}
+      }
+      options.sort((a,b)=>a.n-b.n);const door=options[0];if(!door)return;
+      const {fx,fz,dx,dz,ax,az}=door;
+      const porch={x:(fx+ax)/2,z:(fz+az)/2,hx:Math.abs(ax-fx)/2+.72,hz:Math.abs(az-fz)/2+.72};
+      porches.push(porch);walkable.push(porch);doors.push(door);
+      box(kerb,porch.x,.04,porch.z,2*porch.hx,.035,2*porch.hz);
+      box('#433c35',fx+dx*.10,.78,fz+dz*.10,dx?.19:1.04,1.56,dz?.19:1.04);
+      box(colors[theme],fx+dx*.17,1.62,fz+dz*.17,dx?.42:1.32,.14,dz?.42:1.32)
+    }
     for(let i=0;i<nodes.length;i++){
       const [x,z]=nodes[i],station=checkpoints.indexOf(i),id=station>=0?station%6:i%6;
       const corners=[[-1,-1],[1,-1],[-1,1],[1,1]],first=Math.floor(Math.random()*4);
       for(let k=0;k<4;k++){
         const [sx,sz]=corners[(k+first)%4],w=random(3.1,4.9),d=random(2.6,3.8),bx=x+sx*(2.76+w/2),bz=z+sz*(2.76+d/2);
         if(!vacant(bx,bz,w,d))continue;
-        lots.push({x:bx,z:bz,w,d});block(bx,bz+.23,w+.34,d+.48);makeBuilding(bx,bz,w,d,random(2.6,3.9),id,shops[id],station>=0&&station<3);
+        lots.push({x:bx,z:bz,w,d});block(bx,bz+.23,w+.34,d+.48);build(bx,bz,w,d,random(2.6,3.9),id,station>=0&&station<3);
         if(station>=0||k>0)break
       }
       if(station>=0){
         const px=x-1.48,pz=z-1.48;post('#385759',px,.89,pz,.085,1.78,.085);block(px,pz,.2,.2);
-        label(g,names[station],px,1.78,pz,1.40,.43,'#39665e','#fff1c7')
+        label(g,theme?districts[theme][7+(i%2)][station%3]:names[station],px,1.78,pz,1.40,.43,'#39665e','#fff1c7')
       }
     }
     // 余下的街面放小铺和绿地，使巷道边缘在斜视镜头下也清楚。
@@ -266,7 +316,7 @@ const Street=(()=>{
       const w=random(2.7,4.1),d=random(2.4,3.5),side=Math.random()<.5?-1:1;
       const x=r.x+(r.horizontal?0:side*(r.half+w/2+.3)),z=r.z+(r.horizontal?side*(r.half+d/2+.3):0);
       if(vacant(x,z,w,d)){const id=Math.floor(random(0,6));lots.push({x,z,w,d});
-        block(x,z+.22,w+.34,d+.48);makeBuilding(x,z,w,d,random(2.3,3.2),id,shops[id],false)}
+        block(x,z+.22,w+.34,d+.48);build(x,z,w,d,random(2.3,3.2),id,false)}
     }
     for(let x=-25;x<=25;x+=3.5)for(let z=-19;z<=19;z+=3.5){
       const tx=x+random(-.6,.6),tz=z+random(-.6,.6);
@@ -279,13 +329,14 @@ const Street=(()=>{
     for(const r of roads){if(Math.random()<.19)continue;
       const side=Math.random()<.5?-1:1,along=random(-.8,.8);
       const x=r.x+(r.horizontal?along:side*(r.half-.38)),z=r.z+(r.horizontal?side*(r.half-.38):along);
-      const style=Math.floor(random(0,3));
+      if(doors.some(t=>Math.hypot(t.x-x,t.z-z)<1.65))continue;
+      const style=Math.floor(random(0,theme?2:3));
       if(style===0){box('#947b64',x,.22,z,.82,.42,.77);post('#825940',x,.85,z,.10,1.3,.10);ball(g,'#568465',x,1.68,z,.66,.72,.62);block(x,z,.85,.80)}
       else if(style===1){box('#3e847a',x,.34,z,.53,.68,.5);box('#324d49',x,.70,z,.60,.10,.55);block(x,z,.60,.55)}
       else{box('#b77949',x,.24,z,.79,.48,.7);for(const dx of [-.19,.12])ball(g,'#eca448',x+dx,.54,z,.17,.15,.17);block(x,z,.82,.72)}
     }
   }
-  return {nodes,edges,checkpoints,names,quotas,incidents,neighbor,contains,layout}
+  return {doors,nextDistrict,nodes,edges,checkpoints,names,quotas,incidents,neighbor,contains,layout}
 })();
 </script><script>const Cels=(()=>{
   const T=THREE,cache=new Map();
@@ -336,7 +387,7 @@ const Street=(()=>{
     office:['办公室','#bdc9c2','#62899d',['前台','工位区','茶水间'],['文件柜','书架','背包','花盆','长椅']]
   };
   const zones=[[-12,-7],[0,0],[12,7]],last={};
-  function choose(mode){if(mode==='rush')return {id:'market',name:'汪顺老街',landmarks:Street.names};const ids=Object.keys(catalog).filter(id=>id!==last[mode]);const id=mode==='home'?'park':ids[Math.floor(Math.random()*ids.length)];
+  function choose(mode){if(mode==='rush')return {id:'market',name:Street.nextDistrict(),landmarks:Street.names};const ids=Object.keys(catalog).filter(id=>id!==last[mode]);const id=mode==='home'?'park':ids[Math.floor(Math.random()*ids.length)];
     if(mode!=='home')last[mode]=id;const [name,floor,accent,landmarks,items]=catalog[id];return {id,name,floor,accent,landmarks,items}}
   let solids=[],market=false,grid=null;
   const width=89,height=61,radius=.46;
@@ -539,8 +590,25 @@ const World = (() => {
   const streetShade=new T.MeshBasicMaterial({color:0x293c46,transparent:true,opacity:.18,depthWrite:false});
   let buildings=[],stroke,stamp;
   function goal(index){if(!stamp)return;stamp.visible=index<Street.checkpoints.length;if(stamp.visible){const [x,z]=Street.nodes[Street.checkpoints[index]];stamp.position.set(x,.095,z)}}
-  function makeBuilding(x,z,w,d,h,id,[name,accent],landmark){
+  function makeBuilding(x,z,w,d,h,id,[name,accent],landmark,kind="market"){
     const b=grp(stage);b.position.set(x,0,z);buildings.push({b,x,z,w,d,h});
+    if(kind!=='market'){
+      const wall={office:'#bcced4',school:'#dfb299',works:'#ad8064',homes:'#eee0bd',quay:'#b9d4ce'}[kind];
+      const glass=kind==='office'?'#527e95':'#627b78';
+      cube(b,wall,0,h/2,0,w,h,d);
+      for(let level=1;level<=2;level++){
+        const y=h*(.32*level);
+        for(let j=-1;j<=1;j++)cube(b,glass,j*w*.30,y,d/2+.03,w*(kind==='office'?.30:.19),h*.17,.08);
+        cube(b,glass,w/2+.03,y,0,.08,h*.17,d*.7);
+        if(kind==='homes')cube(b,accent,0,y-.26,d/2+.14,w*.85,.09,.35)
+      }
+      cube(b,accent,0,h+.08,0,w+.2,.18,d+.2);
+      if(kind==='works'){cyl(b,'#876752',-w*.31,h+.66,0,.21,1.4,.28);cube(b,'#646e6c',0,.62,d/2+.05,w*.55,1.24,.12)}
+      if(kind==='office')cube(b,'#829fa8',0,h+.39,0,w*.67,.62,d*.62);
+      if(kind==='school'){for(const x of [-w*.33,w*.33])cube(b,'#fff0d0',x,.64,d/2+.18,.18,1.28,.22);cube(b,accent,0,1.37,d/2+.17,w*.8,.16,.48)}
+      if(kind==='quay'){for(const side of [-1,1])cube(b,'#517d80',0,h+.23,side*d*.24,w+.35,.14,d*.54).rotation.x=side*.19}
+      label(b,name,0,h*.87,d/2+.07,w*.65,.43,accent,'#fff1cb');bake(b);return
+    }
     cube(b,'#977e6c',0,h/2,0,w,h,d);
     const front=Cels.material('shop-'+id);
     const facade=(width,xx,zz,rot)=>{const m=new T.Mesh(new T.PlaneGeometry(width,h),front);m.userData.baked=true;m.rotation.y=rot;m.position.set(xx,h/2,zz);b.add(m)};
@@ -676,7 +744,7 @@ const World = (() => {
 })();
 </script><script>// 敌潮进度单独存储，旧版金币、耐力和其他模式的装备不参与结算。
 const Rush=(()=>{
-  const key='wangcheng-rush-v1',weapons={'玩具锤':10,'黄瓜棒':12,'糖葫芦':14};
+  const key='wangcheng-rush-v2',weapons={'玩具锤':10,'黄瓜棒':12,'糖葫芦':14};
   function integer(n,fallback=0){return Number.isSafeInteger(n)&&n>=0?n:fallback}
   function load(){
     let raw={};try{raw=JSON.parse(localStorage.getItem(key))||{}}catch{}
@@ -707,7 +775,7 @@ const modes={search:['寻找外放者','听声翻找',65],rush:['街区大巡查
 const clamp=(n,a,b)=>Math.max(a,Math.min(b,n)), rand=(a,b)=>a+Math.random()*(b-a);
 const shuffle=a=>{a=[...a];for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a};
 const dist=(a,b)=>Math.hypot(a.x-b.x,a.z-b.z);
-const key='wangcheng-patrol-v1',defaults={coins:0,owned:['玩具锤'],weapon:'玩具锤',skill:0,talent:null,rounds:0,sound:true,music:true,stickScale:100,hammerScale:100,calm:window.matchMedia?.('(prefers-reduced-motion: reduce)').matches||false,breed:'shiba',wardrobe:['scarf'],wear:{}};
+const key='wangcheng-patrol-v2',defaults={coins:0,owned:['玩具锤'],weapon:'玩具锤',skill:0,talent:null,rounds:0,sound:true,music:true,stickScale:100,hammerScale:100,calm:window.matchMedia?.('(prefers-reduced-motion: reduce)').matches||false,breed:'shiba',wardrobe:['scarf'],wear:{}};
 let save;try{save={...defaults,...JSON.parse(localStorage.getItem(key)||'{}')}}catch{save={...defaults}}
 function persist(){try{localStorage.setItem(key,JSON.stringify(save))}catch{}}
 const colors={red:'橘色',blue:'海水蓝',green:'青草绿'};
@@ -873,9 +941,9 @@ function startLevel(id){
     wave=gear.stage;const rules=Rush.rules(wave);goalCount=rules.count;left=rules.seconds;energy=Rush.capacity();spawned=0;
     W.goal(Street.checkpoints.length);
     for(let i=0;i<goalCount;i++)addMob(false,true);
-    for(let i=0;i<7;i++)addMob(true);
-    $('modeName').textContent='敌潮 · 第 '+wave+' 关';
-    instruction(wave<4?'认准不文明行为再出锤，每锤消耗10能量。':'大个子需要连续击中，留意剩余能量。',4)
+    for(let i=0;i<5;i++)addMob(true);
+    $('modeName').textContent='敌潮 · 第 '+wave+' 关 · '+district.name;
+    instruction('',0)
   }
   hud();
   W.animate(0,p,false,0,id==='rush'?gear.weapon:save.weapon,null);
@@ -929,7 +997,7 @@ function finish(win){
 function openFoot(actor,x,z){
   if(!Districts.clear(x,z))return false;
   if(actor!==p&&Math.hypot(p.x-x,p.z-z)<.88)return false;
-  return !mobs.some(m=>m!==actor&&!m.done&&Math.hypot(m.x-x,m.z-z)<(actor===p?.88:1.04))
+  return !mobs.some(m=>m!==actor&&!m.entering&&!m.done&&Math.hypot(m.x-x,m.z-z)<(actor===p?.88:1.04))
 }
 function stepFoot(actor,dx,dz,steer){
   for(const angle of (steer?[0,.48,-.48,1.0,-1.0,1.48,-1.48]:[0])){
@@ -953,6 +1021,7 @@ function addMob(opening=false,incident=false){
   const footpath=bad?lane:(lane<0?-1:1)*rand(.75,1.17);
   const mesh=W.pedestrian((bad?'rogue-':'local-')+type),next=Street.neighbor(start,-1);
   const m={mesh,x,z,type,bad,incident,origin:start,node:start,next,lane:footpath,age:0,speed:rand(.82,1.38),wait:rand(0,.65),phase:rand(0,8),facing:1,reaction:0,done:false,visits:0};
+  m.nextVisit=rand(2,7);
   m.hp=incident&&wave>=4&&spawned%2===0?3:1;
   if(m.hp>1)mesh.scale.setScalar(1.32);
   if(incident)spawned++;
@@ -966,7 +1035,7 @@ function swing(){
 }
 function contact(){
   const forwardX=Math.sin(strike.yaw),forwardZ=Math.cos(strike.yaw);
-  const touched=mobs.filter(m=>{const dx=m.x-p.x,dz=m.z-p.z,d=Math.hypot(dx,dz);return !m.done&&!m.reaction&&d<(strike.tired?reach()*.70:reach())&&
+  const touched=mobs.filter(m=>{const dx=m.x-p.x,dz=m.z-p.z,d=Math.hypot(dx,dz);return !m.entering&&!m.done&&!m.reaction&&d<(strike.tired?reach()*.70:reach())&&
     (d<.46||dx*forwardX+dz*forwardZ>d*.05)&&Districts.line(p.x,p.z,m.x,m.z)});
   const villains=touched.filter(m=>m.bad),targets=villains.length?villains:touched;
   if(!targets.length)return;
@@ -981,15 +1050,45 @@ function contact(){
     }else{mistakes++;floating('打错啦！',m.x,m.z,1.6)}
   }
 }
+function visitBuilding(m,dt){
+  if(m.entering){
+    m.entering=Math.min(1,m.entering+dt*1.8);
+    const t=m.entering,door=m.door;
+    m.x=m.fromX+(door.fx-m.fromX)*t;m.z=m.fromZ+(door.fz-m.fromZ)*t;
+    m.mesh.scale.setScalar(1-t*.92);m.done=t===1;return true
+  }
+  if(!m.door&&m.age>=m.nextVisit){
+    m.nextVisit=m.age+rand(3,6);
+    const options=Street.doors.filter(d=>!mobs.some(n=>n.door===d)&&Districts.clear(d.x,d.z))
+      .sort((a,b)=>dist(m,a)-dist(m,b));
+    for(const door of options.slice(0,5)){
+      const path=Districts.route(m.x,m.z,door.x,door.z);if(!path)continue;
+      m.door=door;m.routeToDoor=[...path,[door.x,door.z]];m.visitDelay=0;break
+    }
+  }
+  if(!m.door)return false;
+  const [x,z]=m.routeToDoor[0],dx=x-m.x,dz=z-m.z,length=Math.hypot(dx,dz);
+  if(length<.14){
+    m.routeToDoor.shift();m.visitDelay=0;
+    if(!m.routeToDoor.length){m.entering=.001;m.fromX=m.x;m.fromZ=m.z;if(queued?.walker===m)cancelCommand()}
+  }else{
+    const v=Math.min(1,m.speed*dt/length);stepFoot(m,dx*v,dz*v,true);
+    const screen=dx*W.right.x+dz*W.right.z;if(Math.abs(screen)>.1)m.facing=Math.sign(screen);
+    m.visitDelay=Math.hypot(x-m.x,z-m.z)<length-.003?0:m.visitDelay+dt;
+    if(m.visitDelay>1.4){m.door=null;m.path=null;m.nextVisit=m.age+rand(2,4)}
+  }
+  W.pedestrianPose(m,Math.floor(m.phase*6)%(m.type>=3?4:3),false,0,false);return true
+}
 function survival(dt,wall){
   impactPulse=Math.max(0,impactPulse-wall);
   if(strike){strike.age+=dt;if(strike.age>=.125&&!strike.contact){strike.age=.125;strike.contact=true;contact();if(kills===goalCount||energy<=0){finish(kills===goalCount);return}}
     if(strike.age>(strike.tired?.56:gear.weapon==='黄瓜棒'?.33:.43)){strike=null;cool=.025;}}
   if(freeze>0)return;
   if(!strike&&cool<=0&&bufferSwing){bufferSwing=false;swing()}
-  spawn-=dt;if(spawn<=0){if(mobs.length<30)addMob();spawn=1.13}
+  spawn-=dt;if(spawn<=0){if(mobs.filter(m=>!m.bad).length<7)addMob();spawn=rand(3.8,5.6)}
   for(const m of mobs){
     m.age+=dt;m.phase+=dt;
+    if(!m.bad&&!m.reaction&&visitBuilding(m,dt)){W.place(m.mesh,m.x,m.z);if(m.done)W.dispose(m.mesh);continue}
     if(m.reaction>0){m.reaction=Math.max(0,m.reaction-dt);const dx=m.pushX*dt*2.2,dz=m.pushZ*dt*2.2;
       stepFoot(m,dx,dz,false);
       const squash=m.reaction>.33,frame=m.type>=3?(squash?4:m.reaction>.16?5:6):(m.bad?2:4)+(squash?0:1);
@@ -1018,7 +1117,7 @@ function survival(dt,wall){
       const frame=m.type>=3?(walking?Math.floor(m.phase*6)%4:(Math.floor(m.phase*2)%2?3:7)):m.bad?(walking?Math.floor(m.phase*5)%2:0):(walking?Math.floor(m.phase*7)%3:3);
       W.pedestrianPose(m,frame,false,0,false)
     }
-    W.place(m.mesh,m.x,m.z);if(!m.incident&&m.age>28&&dist(m,p)>7)m.done=true;
+    W.place(m.mesh,m.x,m.z);
     if(m.done)W.dispose(m.mesh)
   }
   mobs=mobs.filter(m=>!m.done);
@@ -1039,16 +1138,17 @@ function scan(dt){
 }
 const streetActions=[['捡拾垃圾','牵绳遛狗','扶人过街'],['公共场所吸烟','随地吐痰','乱甩湿伞']];
 function patrolHint(){
-  if(energy<=20)return '能量仅剩 '+energy+'，看准再挥锤';
   let closest=null,range=2.6;
   for(const m of mobs){if(m.type<3||m.reaction||m.done)continue;const distance=dist(p,m);if(distance<range){closest=m;range=distance}}
-  return closest?'街头见闻 · '+streetActions[closest.bad?1:0][closest.type-3]:'点路面或行人挥锤 · 摇杆接管'
+  return closest?'街头见闻 · '+streetActions[closest.bad?1:0][closest.type-3]:''
 }
 function hud(){
   if(mode==='rush'){
     const target=mobs.filter(m=>m.bad&&m.hp>0).sort((a,b)=>dist(p,a)-dist(p,b))[0];
     $('objective').textContent=target?'发现线索 '+direction(target.x,target.z)+' '+Math.ceil(dist(p,target))+'m':'巡查中';
-    $('time').textContent='续航 '+Math.ceil(Math.max(0,left))+'s';$('status').textContent='制止 '+kills+'/'+goalCount+' · 能量 '+energy;
+    $('time').textContent='续航 '+Math.ceil(Math.max(0,left))+'s';$('status').textContent='制止 '+kills+'/'+goalCount;
+    $('charge').textContent='能量 '+energy;
+    $('time').dataset.low=String(left<=15);$('charge').dataset.low=String(energy<=20);
     $('energy').firstElementChild.style.width=100*energy/Rush.capacity()+'%';
     if(elapsed>tipUntil)$('hint').textContent=patrolHint();return
   }
@@ -1073,7 +1173,7 @@ function move(dt){
   if(Math.hypot(dx,dy)>.06)cancelCommand();
   else if(queued){
     const order=queued,m=order.walker;
-    if(m){if(m.done||m.reaction||!mobs.includes(m)){cancelCommand();return false}
+    if(m){if(m.entering||m.done||m.reaction||!mobs.includes(m)){cancelCommand();return false}
       order.x=m.x;order.z=m.z}
     const gap=dist(p,order),attackOrder=order.kind==='strikePoint'||!!m;
     const crowded=order.kind==='strikePoint'&&mobs.some(other=>!other.done&&Math.hypot(other.x-order.x,other.z-order.z)<.88);
@@ -1112,7 +1212,7 @@ function placeMarks(dt){
 }
 function sidebarActions(){const sidebar=window.patrolHost?.sidebar;return sidebar?.available?[['去抖音侧边栏',()=>sidebar.open()]]:[]}
 function pause(){
-  if(state!=='play'&&state!=='pause')return;state='pause';bufferSwing=false;music(false);options('巡查暂停',modes[mode][0],'点路面或行人会走过去挥一锤。推动摇杆可取消。',[['继续巡查',resume],['设置',settings],['重新开始',()=>begin('rush')],['重新选狗',home]])
+  if(state!=='play'&&state!=='pause')return;state='pause';bufferSwing=false;music(false);options('巡查暂停',modes[mode][0],'',[['继续巡查',resume],['设置',settings],['重新开始',()=>begin('rush')],['重新选狗',home]])
 
 }
 const scene=$('scene');
@@ -1120,7 +1220,7 @@ scene.onpointerdown=e=>{if(joy||state!=='play')return;unlock();scene.setPointerC
 scene.onpointermove=e=>{if(!joy||joy.id!==e.pointerId)return;const dx=e.clientX-joy.x,dy=e.clientY-joy.y,d=Math.hypot(dx,dy);if(d>6)joy.drag=true;if(joy.drag){const radius=parseFloat($('stick').style.width)*.28,scale=Math.max(radius,d);axis={x:dx/scale,y:dy/scale};$('stick').firstElementChild.style.transform='translate('+axis.x*radius+'px,'+axis.y*radius+'px)'}}
 scene.onpointerup=e=>{if(!joy||joy.id!==e.pointerId)return;const tap=!joy.drag;stopInput();if(tap&&state==='play'){
   const q=W.ground(e.clientX,e.clientY);if(!q)return;
-  if(mode==='rush'){pointCommand(q.x,q.z,W.pickWalker(e.clientX,e.clientY,mobs));return}
+  if(mode==='rush'){pointCommand(q.x,q.z,W.pickWalker(e.clientX,e.clientY,mobs.filter(m=>!m.entering)));return}
   const nearby=objects.filter(o=>Math.hypot(q.x-o.x,q.z-o.z)<.9).sort((a,b)=>Math.hypot(q.x-a.x,q.z-a.z)-Math.hypot(q.x-b.x,q.z-b.z))[0];
   if(nearby)walkTo(nearby);else{const [x,z]=Districts.free(clamp(q.x,-22,22),clamp(q.z,-15,15));queued={kind:'floor',x,z}}
 }}

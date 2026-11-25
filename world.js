@@ -49,8 +49,25 @@ const World = (() => {
   const streetShade=new T.MeshBasicMaterial({color:0x293c46,transparent:true,opacity:.18,depthWrite:false});
   let buildings=[],stroke,stamp;
   function goal(index){if(!stamp)return;stamp.visible=index<Street.checkpoints.length;if(stamp.visible){const [x,z]=Street.nodes[Street.checkpoints[index]];stamp.position.set(x,.095,z)}}
-  function makeBuilding(x,z,w,d,h,id,[name,accent],landmark){
+  function makeBuilding(x,z,w,d,h,id,[name,accent],landmark,kind="market"){
     const b=grp(stage);b.position.set(x,0,z);buildings.push({b,x,z,w,d,h});
+    if(kind!=='market'){
+      const wall={office:'#bcced4',school:'#dfb299',works:'#ad8064',homes:'#eee0bd',quay:'#b9d4ce'}[kind];
+      const glass=kind==='office'?'#527e95':'#627b78';
+      cube(b,wall,0,h/2,0,w,h,d);
+      for(let level=1;level<=2;level++){
+        const y=h*(.32*level);
+        for(let j=-1;j<=1;j++)cube(b,glass,j*w*.30,y,d/2+.03,w*(kind==='office'?.30:.19),h*.17,.08);
+        cube(b,glass,w/2+.03,y,0,.08,h*.17,d*.7);
+        if(kind==='homes')cube(b,accent,0,y-.26,d/2+.14,w*.85,.09,.35)
+      }
+      cube(b,accent,0,h+.08,0,w+.2,.18,d+.2);
+      if(kind==='works'){cyl(b,'#876752',-w*.31,h+.66,0,.21,1.4,.28);cube(b,'#646e6c',0,.62,d/2+.05,w*.55,1.24,.12)}
+      if(kind==='office')cube(b,'#829fa8',0,h+.39,0,w*.67,.62,d*.62);
+      if(kind==='school'){for(const x of [-w*.33,w*.33])cube(b,'#fff0d0',x,.64,d/2+.18,.18,1.28,.22);cube(b,accent,0,1.37,d/2+.17,w*.8,.16,.48)}
+      if(kind==='quay'){for(const side of [-1,1])cube(b,'#517d80',0,h+.23,side*d*.24,w+.35,.14,d*.54).rotation.x=side*.19}
+      label(b,name,0,h*.87,d/2+.07,w*.65,.43,accent,'#fff1cb');bake(b);return
+    }
     cube(b,'#977e6c',0,h/2,0,w,h,d);
     const front=Cels.material('shop-'+id);
     const facade=(width,xx,zz,rot)=>{const m=new T.Mesh(new T.PlaneGeometry(width,h),front);m.userData.baked=true;m.rotation.y=rot;m.position.set(xx,h/2,zz);b.add(m)};

@@ -1,6 +1,6 @@
 // 敌潮进度单独存储，旧版金币、耐力和其他模式的装备不参与结算。
 const Rush=(()=>{
-  const key='wangcheng-rush-v1',weapons={'玩具锤':10,'黄瓜棒':12,'糖葫芦':14};
+  const key='wangcheng-rush-v2',weapons={'玩具锤':10,'黄瓜棒':12,'糖葫芦':14};
   function integer(n,fallback=0){return Number.isSafeInteger(n)&&n>=0?n:fallback}
   function load(){
     let raw={};try{raw=JSON.parse(localStorage.getItem(key))||{}}catch{}

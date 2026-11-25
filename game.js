@@ -5,7 +5,7 @@ const modes={search:['寻找外放者','听声翻找',65],rush:['街区大巡查
 const clamp=(n,a,b)=>Math.max(a,Math.min(b,n)), rand=(a,b)=>a+Math.random()*(b-a);
 const shuffle=a=>{a=[...a];for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a};
 const dist=(a,b)=>Math.hypot(a.x-b.x,a.z-b.z);
-const key='wangcheng-patrol-v1',defaults={coins:0,owned:['玩具锤'],weapon:'玩具锤',skill:0,talent:null,rounds:0,sound:true,music:true,stickScale:100,hammerScale:100,calm:window.matchMedia?.('(prefers-reduced-motion: reduce)').matches||false,breed:'shiba',wardrobe:['scarf'],wear:{}};
+const key='wangcheng-patrol-v2',defaults={coins:0,owned:['玩具锤'],weapon:'玩具锤',skill:0,talent:null,rounds:0,sound:true,music:true,stickScale:100,hammerScale:100,calm:window.matchMedia?.('(prefers-reduced-motion: reduce)').matches||false,breed:'shiba',wardrobe:['scarf'],wear:{}};
 let save;try{save={...defaults,...JSON.parse(localStorage.getItem(key)||'{}')}}catch{save={...defaults}}
 function persist(){try{localStorage.setItem(key,JSON.stringify(save))}catch{}}
 const colors={red:'橘色',blue:'海水蓝',green:'青草绿'};
@@ -171,9 +171,9 @@ function startLevel(id){
     wave=gear.stage;const rules=Rush.rules(wave);goalCount=rules.count;left=rules.seconds;energy=Rush.capacity();spawned=0;
     W.goal(Street.checkpoints.length);
     for(let i=0;i<goalCount;i++)addMob(false,true);
-    for(let i=0;i<7;i++)addMob(true);
-    $('modeName').textContent='敌潮 · 第 '+wave+' 关';
-    instruction(wave<4?'认准不文明行为再出锤，每锤消耗10能量。':'大个子需要连续击中，留意剩余能量。',4)
+    for(let i=0;i<5;i++)addMob(true);
+    $('modeName').textContent='敌潮 · 第 '+wave+' 关 · '+district.name;
+    instruction('',0)
   }
   hud();
   W.animate(0,p,false,0,id==='rush'?gear.weapon:save.weapon,null);
@@ -227,7 +227,7 @@ function finish(win){
 function openFoot(actor,x,z){
   if(!Districts.clear(x,z))return false;
   if(actor!==p&&Math.hypot(p.x-x,p.z-z)<.88)return false;
-  return !mobs.some(m=>m!==actor&&!m.done&&Math.hypot(m.x-x,m.z-z)<(actor===p?.88:1.04))
+  return !mobs.some(m=>m!==actor&&!m.entering&&!m.done&&Math.hypot(m.x-x,m.z-z)<(actor===p?.88:1.04))
 }
 function stepFoot(actor,dx,dz,steer){
   for(const angle of (steer?[0,.48,-.48,1.0,-1.0,1.48,-1.48]:[0])){
@@ -251,6 +251,7 @@ function addMob(opening=false,incident=false){
   const footpath=bad?lane:(lane<0?-1:1)*rand(.75,1.17);
   const mesh=W.pedestrian((bad?'rogue-':'local-')+type),next=Street.neighbor(start,-1);
   const m={mesh,x,z,type,bad,incident,origin:start,node:start,next,lane:footpath,age:0,speed:rand(.82,1.38),wait:rand(0,.65),phase:rand(0,8),facing:1,reaction:0,done:false,visits:0};
+  m.nextVisit=rand(2,7);
   m.hp=incident&&wave>=4&&spawned%2===0?3:1;
   if(m.hp>1)mesh.scale.setScalar(1.32);
   if(incident)spawned++;
@@ -264,7 +265,7 @@ function swing(){
 }
 function contact(){
   const forwardX=Math.sin(strike.yaw),forwardZ=Math.cos(strike.yaw);
-  const touched=mobs.filter(m=>{const dx=m.x-p.x,dz=m.z-p.z,d=Math.hypot(dx,dz);return !m.done&&!m.reaction&&d<(strike.tired?reach()*.70:reach())&&
+  const touched=mobs.filter(m=>{const dx=m.x-p.x,dz=m.z-p.z,d=Math.hypot(dx,dz);return !m.entering&&!m.done&&!m.reaction&&d<(strike.tired?reach()*.70:reach())&&
     (d<.46||dx*forwardX+dz*forwardZ>d*.05)&&Districts.line(p.x,p.z,m.x,m.z)});
   const villains=touched.filter(m=>m.bad),targets=villains.length?villains:touched;
   if(!targets.length)return;
@@ -279,15 +280,45 @@ function contact(){
     }else{mistakes++;floating('打错啦！',m.x,m.z,1.6)}
   }
 }
+function visitBuilding(m,dt){
+  if(m.entering){
+    m.entering=Math.min(1,m.entering+dt*1.8);
+    const t=m.entering,door=m.door;
+    m.x=m.fromX+(door.fx-m.fromX)*t;m.z=m.fromZ+(door.fz-m.fromZ)*t;
+    m.mesh.scale.setScalar(1-t*.92);m.done=t===1;return true
+  }
+  if(!m.door&&m.age>=m.nextVisit){
+    m.nextVisit=m.age+rand(3,6);
+    const options=Street.doors.filter(d=>!mobs.some(n=>n.door===d)&&Districts.clear(d.x,d.z))
+      .sort((a,b)=>dist(m,a)-dist(m,b));
+    for(const door of options.slice(0,5)){
+      const path=Districts.route(m.x,m.z,door.x,door.z);if(!path)continue;
+      m.door=door;m.routeToDoor=[...path,[door.x,door.z]];m.visitDelay=0;break
+    }
+  }
+  if(!m.door)return false;
+  const [x,z]=m.routeToDoor[0],dx=x-m.x,dz=z-m.z,length=Math.hypot(dx,dz);
+  if(length<.14){
+    m.routeToDoor.shift();m.visitDelay=0;
+    if(!m.routeToDoor.length){m.entering=.001;m.fromX=m.x;m.fromZ=m.z;if(queued?.walker===m)cancelCommand()}
+  }else{
+    const v=Math.min(1,m.speed*dt/length);stepFoot(m,dx*v,dz*v,true);
+    const screen=dx*W.right.x+dz*W.right.z;if(Math.abs(screen)>.1)m.facing=Math.sign(screen);
+    m.visitDelay=Math.hypot(x-m.x,z-m.z)<length-.003?0:m.visitDelay+dt;
+    if(m.visitDelay>1.4){m.door=null;m.path=null;m.nextVisit=m.age+rand(2,4)}
+  }
+  W.pedestrianPose(m,Math.floor(m.phase*6)%(m.type>=3?4:3),false,0,false);return true
+}
 function survival(dt,wall){
   impactPulse=Math.max(0,impactPulse-wall);
   if(strike){strike.age+=dt;if(strike.age>=.125&&!strike.contact){strike.age=.125;strike.contact=true;contact();if(kills===goalCount||energy<=0){finish(kills===goalCount);return}}
     if(strike.age>(strike.tired?.56:gear.weapon==='黄瓜棒'?.33:.43)){strike=null;cool=.025;}}
   if(freeze>0)return;
   if(!strike&&cool<=0&&bufferSwing){bufferSwing=false;swing()}
-  spawn-=dt;if(spawn<=0){if(mobs.length<30)addMob();spawn=1.13}
+  spawn-=dt;if(spawn<=0){if(mobs.filter(m=>!m.bad).length<7)addMob();spawn=rand(3.8,5.6)}
   for(const m of mobs){
     m.age+=dt;m.phase+=dt;
+    if(!m.bad&&!m.reaction&&visitBuilding(m,dt)){W.place(m.mesh,m.x,m.z);if(m.done)W.dispose(m.mesh);continue}
     if(m.reaction>0){m.reaction=Math.max(0,m.reaction-dt);const dx=m.pushX*dt*2.2,dz=m.pushZ*dt*2.2;
       stepFoot(m,dx,dz,false);
       const squash=m.reaction>.33,frame=m.type>=3?(squash?4:m.reaction>.16?5:6):(m.bad?2:4)+(squash?0:1);
@@ -316,7 +347,7 @@ function survival(dt,wall){
       const frame=m.type>=3?(walking?Math.floor(m.phase*6)%4:(Math.floor(m.phase*2)%2?3:7)):m.bad?(walking?Math.floor(m.phase*5)%2:0):(walking?Math.floor(m.phase*7)%3:3);
       W.pedestrianPose(m,frame,false,0,false)
     }
-    W.place(m.mesh,m.x,m.z);if(!m.incident&&m.age>28&&dist(m,p)>7)m.done=true;
+    W.place(m.mesh,m.x,m.z);
     if(m.done)W.dispose(m.mesh)
   }
   mobs=mobs.filter(m=>!m.done);
@@ -337,16 +368,17 @@ function scan(dt){
 }
 const streetActions=[['捡拾垃圾','牵绳遛狗','扶人过街'],['公共场所吸烟','随地吐痰','乱甩湿伞']];
 function patrolHint(){
-  if(energy<=20)return '能量仅剩 '+energy+'，看准再挥锤';
   let closest=null,range=2.6;
   for(const m of mobs){if(m.type<3||m.reaction||m.done)continue;const distance=dist(p,m);if(distance<range){closest=m;range=distance}}
-  return closest?'街头见闻 · '+streetActions[closest.bad?1:0][closest.type-3]:'点路面或行人挥锤 · 摇杆接管'
+  return closest?'街头见闻 · '+streetActions[closest.bad?1:0][closest.type-3]:''
 }
 function hud(){
   if(mode==='rush'){
     const target=mobs.filter(m=>m.bad&&m.hp>0).sort((a,b)=>dist(p,a)-dist(p,b))[0];
     $('objective').textContent=target?'发现线索 '+direction(target.x,target.z)+' '+Math.ceil(dist(p,target))+'m':'巡查中';
-    $('time').textContent='续航 '+Math.ceil(Math.max(0,left))+'s';$('status').textContent='制止 '+kills+'/'+goalCount+' · 能量 '+energy;
+    $('time').textContent='续航 '+Math.ceil(Math.max(0,left))+'s';$('status').textContent='制止 '+kills+'/'+goalCount;
+    $('charge').textContent='能量 '+energy;
+    $('time').dataset.low=String(left<=15);$('charge').dataset.low=String(energy<=20);
     $('energy').firstElementChild.style.width=100*energy/Rush.capacity()+'%';
     if(elapsed>tipUntil)$('hint').textContent=patrolHint();return
   }
@@ -371,7 +403,7 @@ function move(dt){
   if(Math.hypot(dx,dy)>.06)cancelCommand();
   else if(queued){
     const order=queued,m=order.walker;
-    if(m){if(m.done||m.reaction||!mobs.includes(m)){cancelCommand();return false}
+    if(m){if(m.entering||m.done||m.reaction||!mobs.includes(m)){cancelCommand();return false}
       order.x=m.x;order.z=m.z}
     const gap=dist(p,order),attackOrder=order.kind==='strikePoint'||!!m;
     const crowded=order.kind==='strikePoint'&&mobs.some(other=>!other.done&&Math.hypot(other.x-order.x,other.z-order.z)<.88);
@@ -410,7 +442,7 @@ function placeMarks(dt){
 }
 function sidebarActions(){const sidebar=window.patrolHost?.sidebar;return sidebar?.available?[['去抖音侧边栏',()=>sidebar.open()]]:[]}
 function pause(){
-  if(state!=='play'&&state!=='pause')return;state='pause';bufferSwing=false;music(false);options('巡查暂停',modes[mode][0],'点路面或行人会走过去挥一锤。推动摇杆可取消。',[['继续巡查',resume],['设置',settings],['重新开始',()=>begin('rush')],['重新选狗',home]])
+  if(state!=='play'&&state!=='pause')return;state='pause';bufferSwing=false;music(false);options('巡查暂停',modes[mode][0],'',[['继续巡查',resume],['设置',settings],['重新开始',()=>begin('rush')],['重新选狗',home]])
 
 }
 const scene=$('scene');
@@ -418,7 +450,7 @@ scene.onpointerdown=e=>{if(joy||state!=='play')return;unlock();scene.setPointerC
 scene.onpointermove=e=>{if(!joy||joy.id!==e.pointerId)return;const dx=e.clientX-joy.x,dy=e.clientY-joy.y,d=Math.hypot(dx,dy);if(d>6)joy.drag=true;if(joy.drag){const radius=parseFloat($('stick').style.width)*.28,scale=Math.max(radius,d);axis={x:dx/scale,y:dy/scale};$('stick').firstElementChild.style.transform='translate('+axis.x*radius+'px,'+axis.y*radius+'px)'}}
 scene.onpointerup=e=>{if(!joy||joy.id!==e.pointerId)return;const tap=!joy.drag;stopInput();if(tap&&state==='play'){
   const q=W.ground(e.clientX,e.clientY);if(!q)return;
-  if(mode==='rush'){pointCommand(q.x,q.z,W.pickWalker(e.clientX,e.clientY,mobs));return}
+  if(mode==='rush'){pointCommand(q.x,q.z,W.pickWalker(e.clientX,e.clientY,mobs.filter(m=>!m.entering)));return}
   const nearby=objects.filter(o=>Math.hypot(q.x-o.x,q.z-o.z)<.9).sort((a,b)=>Math.hypot(q.x-a.x,q.z-a.z)-Math.hypot(q.x-b.x,q.z-b.z))[0];
   if(nearby)walkTo(nearby);else{const [x,z]=Districts.free(clamp(q.x,-22,22),clamp(q.z,-15,15));queued={kind:'floor',x,z}}
 }}
