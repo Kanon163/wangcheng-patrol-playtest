@@ -138,6 +138,17 @@ const World = (() => {
     camera.position.copy(focus).addScaledVector(camDir,32);camera.lookAt(focus);camera.updateProjectionMatrix();camera.updateMatrixWorld();
   }
   function project(x,y,z){screenPos.set(x,y,z).project(camera);return {x:(screenPos.x+1)*innerWidth/2,y:(1-screenPos.y)*innerHeight/2}}
+  function pickWalker(x,y,walkers){
+    ray.setFromCamera({x:x/innerWidth*2-1,y:1-y/innerHeight*2},camera);
+    let chosen=null,depth=Infinity;
+    for(const m of walkers){
+      if(m.done||m.reaction)continue;
+      const u=m.mesh.userData.paper.userData,hit=ray.intersectObject(u.card,false)[0];
+      if(hit&&hit.distance<depth&&Cels.visiblePixel(u.name,hit.uv)){chosen=m;depth=hit.distance}
+    }
+    if(chosen&&buildings.some(({b})=>ray.intersectObject(b,true)[0]?.distance<depth))return null;
+    return chosen
+  }
   function ground(x,y){ray.setFromCamera({x:x/innerWidth*2-1,y:1-y/innerHeight*2},camera);const p=new T.Vector3();ray.ray.intersectPlane(plane,p);return p}
   function resize(){renderer.setSize(innerWidth,innerHeight,false);if(dog)cameraUpdate(1)}
   addEventListener('resize',resize);resize();
@@ -169,5 +180,5 @@ const World = (() => {
     for(const s of [-1,1]){ball(g,ink,s*.09,.19,.31,.025,.03,.02);ball(g,'#8bd5ce',s*.22,.015,-.03,.16,.06,.16)}
     bake(g);return g
   }
-  return {goal,pedestrian,pedestrianPose,buildStage,outfit,citizen,person,prop,bird,place,dispose,project,ground,animate,equip,snap:p=>{if(p)place(dog,p.x,p.z);cameraUpdate(1)},right:{x:10/Math.sqrt(164),z:-8/Math.sqrt(164)},down:{x:8/Math.sqrt(164),z:10/Math.sqrt(164)}}
+  return {goal,pickWalker,pedestrian,pedestrianPose,buildStage,outfit,citizen,person,prop,bird,place,dispose,project,ground,animate,equip,snap:p=>{if(p)place(dog,p.x,p.z);cameraUpdate(1)},right:{x:10/Math.sqrt(164),z:-8/Math.sqrt(164)},down:{x:8/Math.sqrt(164),z:10/Math.sqrt(164)}}
 })();

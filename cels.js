@@ -7,6 +7,17 @@ const Cels=(()=>{
     const m=new T.MeshBasicMaterial({map:texture,transparent:true,alphaTest:.09,toneMapped:false,side:T.DoubleSide});cache.set(key,m);
     const img=window.patrolHost?.createImage?window.patrolHost.createImage():new Image();img.onload=()=>{texture.image=img;texture.needsUpdate=true};img.src='art/'+name+'.png';return m
   }
+  const masks=new Map();
+  function visiblePixel(name,uv){
+    if(!masks.has(name)){
+      const img=material(name).map.image;if(!img)return false;
+      const canvas=document.createElement('canvas');canvas.width=208;canvas.height=104;
+      const ctx=canvas.getContext('2d');ctx.drawImage(img,0,0,208,104);
+      masks.set(name,ctx.getImageData(0,0,208,104).data)
+    }
+    const x=Math.max(0,Math.min(207,Math.floor(uv.x*208))),y=Math.max(0,Math.min(103,Math.floor((1-uv.y)*104)));
+    return masks.get(name)[(y*208+x)*4+3]>35
+  }
   function actor(name,size){
     const g=new T.Group(),geo=new T.PlaneGeometry(size,size),card=new T.Mesh(geo,material(name));
     card.position.y=size*.475;card.userData.baked=true;g.add(card);g.userData.card=card;g.userData.name=name;frame(g,0);return g
@@ -24,5 +35,5 @@ const Cels=(()=>{
   const handPos=[[.55,.80,-.68],[.39,.65,-.53],[.56,.81,-.72],[.45,.91,-.61],[-.44,1.14,.84],[.09,1.83,1.0],[.83,.73,-1.43],[.59,.67,-1.85]];
   function dogPose(r,t,walk,step){const i=step??(walk?Math.floor(t*9)%4:0),[x,y,angle]=handPos[i];frame(r.g,i);
     r.hand.position.set(x,y,.07);r.hand.rotation.z=angle;r.wardrobe.rotation.z=i===6?-.16:i===5?.10:0;r.wardrobe.position.y=i===6?-.12:walk?Math.sin(t*9)*.025:0}
-  return {material,actor,frame,dog,dogPose}
+  return {material,visiblePixel,actor,frame,dog,dogPose}
 })();

@@ -10,29 +10,61 @@ const Districts=(()=>{
   const zones=[[-12,-7],[0,0],[12,7]],last={};
   function choose(mode){if(mode==='rush')return {id:'market',name:'汪顺老街',landmarks:Street.names};const ids=Object.keys(catalog).filter(id=>id!==last[mode]);const id=mode==='home'?'park':ids[Math.floor(Math.random()*ids.length)];
     if(mode!=='home')last[mode]=id;const [name,floor,accent,landmarks,items]=catalog[id];return {id,name,floor,accent,landmarks,items}}
-  let solids=[];
-  function clear(x,z){return Math.abs(x)<=22&&Math.abs(z)<=15&&!solids.some(([a,b,w,d])=>Math.abs(x-a)<w&&Math.abs(z-b)<d)}
+  let solids=[],market=false,grid=null;
+  const width=89,height=61,radius=.46;
+  function clear(x,z){
+    if(Math.abs(x)>22||Math.abs(z)>15||market&&!Street.contains(x,z,radius))return false;
+    return !solids.some(([a,b,w,d])=>{
+      const dx=Math.max(0,Math.abs(x-a)-w),dz=Math.max(0,Math.abs(z-b)-d);
+      return dx*dx+dz*dz<radius*radius
+    })
+  }
+  function point(i){return [(i%width)/2-22,Math.floor(i/width)/2-15]}
+  function gridMap(){
+    if(!grid){grid=new Uint8Array(width*height);for(let i=0;i<grid.length;i++){const [x,z]=point(i);grid[i]=clear(x,z)?1:0}}
+    return grid
+  }
   function free(x,z){
     if(clear(x,z))return [x,z];
-    for(let r=1;r<9;r++)for(let i=0;i<16;i++){const a=i*Math.PI/8,px=x+r*.55*Math.cos(a),pz=z+r*.55*Math.sin(a);if(clear(px,pz))return [px,pz]}
-    return [0,0]
+    const map=gridMap();let nearest=0,best=Infinity;
+    for(let i=0;i<map.length;i++)if(map[i]){
+      const [a,b]=point(i),d=(a-x)**2+(b-z)**2;if(d<best){best=d;nearest=i}
+    }
+    return point(nearest)
   }
-  // 半米网格只在点选目的地且直线被挡住时寻路。
-  function line(ax,az,bx,bz){const steps=Math.ceil(Math.hypot(bx-ax,bz-az)/.28);for(let i=1;i<=steps;i++)if(!clear(ax+(bx-ax)*i/steps,az+(bz-az)*i/steps))return false;return true}
+  function line(ax,az,bx,bz){
+    const steps=Math.max(1,Math.ceil(Math.hypot(bx-ax,bz-az)/.16));
+    for(let i=1;i<=steps;i++)if(!clear(ax+(bx-ax)*i/steps,az+(bz-az)*i/steps))return false;
+    return true
+  }
   function route(ax,az,bx,bz){
     if(line(ax,az,bx,bz))return [];
-    const width=89,height=61,ref=(x,z)=>Math.round((z+15)*2)*width+Math.round((x+22)*2);
-    const point=k=>[(k%width)/2-22,Math.floor(k/width)/2-15];
-    const start=ref(ax,az),goal=ref(bx,bz),seen=new Int32Array(width*height);seen.fill(-1);seen[start]=start;
-    const queue=[start];let last=start,best=Infinity;
-    for(let i=0;i<queue.length;i++){const k=queue[i],[x,z]=point(k),d=Math.hypot(x-bx,z-bz);
-      if(d<best&&line(x,z,bx,bz)){best=d;last=k;if(d<=.8||k===goal)break}
-      for(const [ox,oz] of [[.5,0],[-.5,0],[0,.5],[0,-.5]]){const xx=x+ox,zz=z+oz,n=ref(xx,zz);if(clear(xx,zz)&&seen[n]<0){seen[n]=k;queue.push(n)}}
+    const map=gridMap(),seen=new Int32Array(map.length);seen.fill(-1);
+    const queue=[];let end=-1;
+    const col=Math.round((ax+22)*2),row=Math.round((az+15)*2);
+    for(let z=Math.max(0,row-1);z<=Math.min(height-1,row+1);z++)for(let x=Math.max(0,col-1);x<=Math.min(width-1,col+1);x++){
+      const id=z*width+x;if(map[id]&&line(ax,az,...point(id))){seen[id]=id;queue.push(id)}
     }
-    const path=[];while(last!==start){path.push(point(last));last=seen[last]}return path.reverse()
+    for(let i=0;i<queue.length;i++){
+      const id=queue[i],[x,z]=point(id);
+      if(Math.hypot(x-bx,z-bz)<1.05&&line(x,z,bx,bz)){end=id;break}
+      for(const n of [id-1,id+1,id-width,id+width]){
+        if(!map[n]||seen[n]!==-1)continue;
+        const [nx,nz]=point(n);if(Math.abs(nx-x)>.51||!clear((nx+x)/2,(nz+z)/2))continue;
+        seen[n]=id;queue.push(n)
+      }
+    }
+    if(end<0)return null;
+    const path=[];for(let i=end;;i=seen[i]){path.push(point(i));if(seen[i]===i)break}
+    path.reverse();path.push([bx,bz]);
+    const corners=[];let x=ax,z=az;
+    for(let i=0;i<path.length;){let j=i;while(j+1<path.length&&line(x,z,...path[j+1]))j++;
+      [x,z]=path[j];corners.push(path[j]);i=j+1
+    }
+    corners.pop();return corners
   }
   function build(g,d,{cube,ball,cyl,bench,plant,label,makeBuilding},home){
-    solids=[];const block=(x,z,w,d)=>solids.push([x,z,w/2+.17,d/2+.17]);
+    solids=[];grid=null;market=d.id==='market';const block=(x,z,w,d)=>solids.push([x,z,w/2,d/2]);
     if(d.id==='market'){Street.layout(g,{cube,ball,cyl,label},block,makeBuilding);return}
     const box=(...v)=>cube(g,...v),round=(...v)=>ball(g,...v),post=(...v)=>cyl(g,...v),sign=(...v)=>label(g,...v);
     const {id,floor,accent}=d, ink='#344b4c',white='#fff1ce';

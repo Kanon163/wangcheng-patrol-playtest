@@ -78,7 +78,7 @@ function layoutControls(){
   const compact=innerWidth<=700||window.matchMedia?.('(pointer:coarse)').matches||window.patrolHost;
   const stick=(compact?192:134)*controlSize('stickScale')/100;
   const width=(compact?232:164)*controlSize('hammerScale')/100,height=(compact?152:98)*controlSize('hammerScale')/100;
-  const fit=Math.min(1,(innerHeight*.48)/Math.max(stick,height), (innerWidth-20)/Math.max(width,stick));
+  const fit=.65*Math.min(1,(innerHeight*.48)/Math.max(stick,height), (innerWidth-20)/Math.max(width,stick));
   const diameter=Math.round(stick*fit),w=Math.round(width*fit),h=Math.round(height*fit);
   const margin=8, gap=8, dx=innerWidth-2*margin-(diameter+w)/2;
   const rx=(diameter+w)/2+gap, ry=(diameter+h)/2+gap;
@@ -128,7 +128,7 @@ function floating(text,x,z,height=1.15,life=.75){const el=document.createElement
 function instruction(txt,sec=3){$('hint').textContent=txt;tipUntil=elapsed+sec}
 function begin(id){
   unlock();clearMarks();stopInput();close();mode=id;state='play';elapsed=0;left=modes[id][2];kills=0;inspected=0;energy=100;beat=1;cool=0;hit=0;spawn=.2;combo=0;proofs=[];
-  p={x:0,z:0,yaw:.48};district=W.buildStage(id);order=100;mistakes=0;arrivals=0;zoneIndex=0;zoneHits=0;crowdDecks=[[],[]];strike=null;freeze=impactPulse=0;bufferSwing=false;[p.x,p.z]=id==='rush'?[-14.5,0]:Districts.free(0,0);if(id==='rush')p.yaw=Math.PI/2;W.equip(save.weapon);bird=save.talent==='bird'?W.bird():null;talentClock=3;W.snap(p);$('home').hidden=true;$('hud').hidden=false;$('modeName').textContent=district.name+' · '+modes[id][1];$('toast').textContent='';
+  p={x:0,z:0,yaw:.48};district=W.buildStage(id);order=100;mistakes=0;arrivals=0;zoneIndex=0;zoneHits=0;crowdDecks=[[],[]];strike=null;freeze=impactPulse=0;bufferSwing=false;[p.x,p.z]=id==='rush'?Street.nodes[0]:Districts.free(0,0);if(id==='rush')p.yaw=Math.PI/2;W.equip(save.weapon);bird=save.talent==='bird'?W.bird():null;talentClock=3;W.snap(p);$('home').hidden=true;$('hud').hidden=false;$('modeName').textContent=district.name+' · '+modes[id][1];$('toast').textContent='';
   const spots=shuffle([[-9,-5],[-4,3],[.6,-.4],[5,5],[10,-3],[2,9]]).map(([x,z])=>Districts.free(x+rand(-1,1),z+rand(-.8,.8)));
   if(id==='search'){
     const names=shuffle(district.items);
@@ -144,7 +144,7 @@ function begin(id){
     addObj('proof','查监控',spots[3],W.prop('报刊架',2),1.2,'clue').fact='监控反光，外套只看得出是'+shuffle([colors[culprit.color],colors[other.color]]).join('或')+'。';
     addObj('proof','问目击者',spots[4],W.citizen('quiet'),2,'clue').fact='目击者：“'+other.item+'的那位一直排在我身后，我可以替这位作证。”';
     instruction('有人插队！点线索搜证，点名字问话。',5)
-  }else{for(let i=0;i<8;i++)addMob(true);addMob(false,true);instruction('到金圈附近，面对捣乱者按挥锤。穿过八站，集齐八枚巡章。',4)}
+  }else{for(let i=0;i<8;i++)addMob(true);addMob(false,true);instruction('点地面或行人，走近挥锤。到金圈制止捣乱者，集齐八枚巡章。',4)}
   hud()
 }
 function walkTo(o){if(!o||state!=='play')return;unlock();stopInput();queued=o;
@@ -191,13 +191,31 @@ function finish(win){
   receipt()
 }
 function streetPoint(){return Street.nodes[Street.checkpoints[zoneIndex%Street.checkpoints.length]]}
+// 先检查本帧已占用的脚底位置，再提交位移。避让不会把旁人推向墙体。
+function openFoot(actor,x,z){
+  if(!Districts.clear(x,z))return false;
+  if(actor!==p&&Math.hypot(p.x-x,p.z-z)<.88)return false;
+  return !mobs.some(m=>m!==actor&&!m.done&&Math.hypot(m.x-x,m.z-z)<(actor===p?.88:1.04))
+}
+function stepFoot(actor,dx,dz,steer){
+  for(const angle of (steer?[0,.48,-.48,1.0,-1.0,1.48,-1.48]:[0])){
+    const sn=Math.sin(angle),cs=Math.cos(angle),x=actor.x+dx*cs-dz*sn,z=actor.z+dx*sn+dz*cs;
+    if(openFoot(actor,x,z)&&Districts.line(actor.x,actor.z,x,z)){actor.x=x;actor.z=z;return true}
+  }
+  return false
+}
 function addMob(opening=false,incident=false){
-  const i=arrivals++,node=Street.checkpoints[zoneIndex%Street.checkpoints.length],start=incident?node:opening?[4,4,5,5,1,6,0,9][i%8]:Math.random()<.65?node:Math.floor(rand(0,12));
+  const i=arrivals++,node=Street.checkpoints[zoneIndex%Street.checkpoints.length],start=incident?node:opening&&i<2?0:Math.random()<.35?node:Math.floor(rand(0,Street.nodes.length));
   const [sx,sz]=Street.nodes[start],lane=rand(-.72,.72),bad=incident||((opening?i%3===1:Math.random()<.36)),deck=crowdDecks[bad?1:0];
   if(!deck.length)deck.push(...shuffle([0,1,2,3,4,5]));
   const type=incident?Street.incidents[(zoneIndex+zoneHits)%Street.incidents.length]:deck.pop();
-  const x=opening&&i<2?-12.6+i*.6:sx+rand(-.8,.8),z=opening&&i<2?lane:sz+lane;
-  const footpath=bad?lane:(lane<0?-1:1)*rand(1.55,1.94);
+  let x,z,placed=false;
+  for(let n=0;n<32;n++){
+    x=sx+rand(-1.85,1.85);z=sz+rand(-1.85,1.85);
+    if(openFoot(null,x,z)){placed=true;break}
+  }
+  if(!placed)return;
+  const footpath=bad?lane:(lane<0?-1:1)*rand(.75,1.17);
   const mesh=W.pedestrian((bad?'rogue-':'local-')+type),next=Street.neighbor(start,-1);
   const m={mesh,x,z,type,bad,incident,origin:start,node:start,next,lane:footpath,age:0,speed:rand(.82,1.38),wait:rand(0,.65),phase:rand(0,8),facing:1,reaction:0,done:false,visits:0};
   mobs.push(m);W.place(mesh,x,z)
@@ -228,7 +246,7 @@ function contact(){
   if(kills>=6)combo=1;
   zoneHits+=atCheckpoint;
   if(atCheckpoint&&zoneHits<Street.quotas[zoneIndex])instruction('本站已制止 '+zoneHits+'/'+Street.quotas[zoneIndex]+'，留意下一个捣乱者',2);
-  if(atCheckpoint&&zoneHits>=Street.quotas[zoneIndex]){zoneHits=0;sfx('stamp');zoneIndex++;W.goal(zoneIndex);for(const m of mobs){if(m.incident){m.incident=false;m.next=Street.neighbor(m.node,-1)}}
+  if(atCheckpoint&&zoneHits>=Street.quotas[zoneIndex]){zoneHits=0;sfx('stamp');zoneIndex++;W.goal(zoneIndex);for(const m of mobs){if(m.incident){m.incident=false;m.path=null;m.next=Street.neighbor(m.node,-1)}}
     if(zoneIndex<Street.checkpoints.length){addMob(false,true);instruction('巡章到手！去'+Street.names[zoneIndex]+'。',2.4)}
   }
 }
@@ -242,18 +260,30 @@ function survival(dt,wall){
   for(const m of mobs){
     m.age+=dt;m.phase+=dt;
     if(m.reaction>0){m.reaction=Math.max(0,m.reaction-dt);const dx=m.pushX*dt*2.2,dz=m.pushZ*dt*2.2;
-      if(Districts.clear(m.x+dx,m.z+dz)){m.x+=dx;m.z+=dz}
+      stepFoot(m,dx,dz,false);
       const squash=m.reaction>.33,frame=m.type>=3?(squash?4:m.reaction>.16?5:6):(m.bad?2:4)+(squash?0:1);
       W.pedestrianPose(m,frame,!save.calm&&m.reaction>.47,save.calm?0:Math.sin((.52-m.reaction)*58)*Math.pow(m.reaction/.52,2),m.reaction>.34);
       if(!m.reaction){if(m.bad)m.done=true;else m.wait=1.5}
     }else{
-      let tx,tz;if(m.incident){const [cx,cz]=Street.nodes[m.origin];tx=cx+(m.visits%2?1:-1)*1.15;tz=cz+m.lane}
-      else{const [cx,cz]=Street.nodes[m.next];tx=cx+m.lane;tz=cz+m.lane}
-      const dx=tx-m.x,dz=tz-m.z,d=Math.hypot(dx,dz),walking=m.wait<=0;
-      if(!walking)m.wait-=dt;
-      else if(d<.12){m.visits++;m.wait=m.incident?rand(.55,1.3):m.visits%2===0?rand(.7,2):rand(.08,.35);
-        const prev=m.node;m.node=m.next;m.next=Street.neighbor(m.node,prev)}
-      else{const v=Math.min(d,m.speed*dt);m.x+=dx/d*v;m.z+=dz/d*v;const screen=dx*W.right.x+dz*W.right.z;if(Math.abs(screen)>.1)m.facing=Math.sign(screen)}
+      const dest=m.incident?m.origin:m.next,[cx,cz]=Street.nodes[dest];
+      const tx=cx+(m.incident?(m.visits%2?1:-1)*1.15:m.lane),tz=cz+m.lane;
+      let walking=false;
+      if(m.wait>0)m.wait-=dt;
+      else if(Math.hypot(tx-m.x,tz-m.z)<.23||m.blocked>.85){
+        m.visits++;m.wait=rand(.2,1.1);m.path=null;m.blocked=0;
+        if(!m.incident){const prev=m.node;if(Math.hypot(m.x-cx,m.z-cz)<2.4)m.node=m.next;
+          m.next=Street.neighbor(m.node,prev);m.lane=-m.lane}
+      }else{
+        if(!m.path){const goal=Districts.free(tx,tz);m.path=Districts.route(m.x,m.z,...goal);
+          if(m.path)m.path.push(goal)}
+        if(m.path?.length){
+          const [gx,gz]=m.path[0],dx=gx-m.x,dz=gz-m.z,d=Math.hypot(dx,dz);
+          if(d<.15){m.path.shift();if(!m.path.length)m.path=null}
+          else{const v=Math.min(1,m.speed*dt/d);walking=stepFoot(m,dx*v,dz*v,true);
+            const screen=dx*W.right.x+dz*W.right.z;if(walking&&Math.abs(screen)>.1)m.facing=Math.sign(screen)}
+        }
+        m.blocked=walking?0:(m.blocked||0)+dt
+      }
       const frame=m.type>=3?(walking?Math.floor(m.phase*6)%4:(Math.floor(m.phase*2)%2?3:7)):m.bad?(walking?Math.floor(m.phase*5)%2:0):(walking?Math.floor(m.phase*7)%3:3);
       W.pedestrianPose(m,frame,false,0,false)
     }
@@ -285,44 +315,79 @@ function patrolHint(){
   if(energy<18)return '体力低，捡星回能';
   let closest=null,range=2.6;
   for(const m of mobs){if(m.type<3||m.reaction||m.done)continue;const distance=dist(p,m);if(distance<range){closest=m;range=distance}}
-  return closest?'街头见闻 · '+streetActions[closest.bad?1:0][closest.type-3]:'拖动摇杆走街巷 · 面向目标挥锤'
+  return closest?'街头见闻 · '+streetActions[closest.bad?1:0][closest.type-3]:'点路面或行人挥锤 · 摇杆接管'
 }
 function hud(){
   if(!p)return;$('objective').textContent=mode==='rush'?(zoneIndex>=Street.checkpoints.length?'巡章已集齐':Street.names[zoneIndex]+' '+(Math.hypot(p.x-streetPoint()[0],p.z-streetPoint()[1])<3.2?'· 制止 '+zoneHits+'/'+Street.quotas[zoneIndex]:direction(...streetPoint())+' '+Math.ceil(Math.hypot(p.x-streetPoint()[0],p.z-streetPoint()[1]))+'m')):mode==='search'?'循着铃声找出外放者':'找出插队还说谎的人';
   $('time').textContent='◷ '+Math.ceil(Math.max(0,left))+'s';$('status').textContent=mode==='rush'?'巡章 '+zoneIndex+'/'+Street.checkpoints.length+' · 制止 '+kills:mode==='search'?'已排除 '+inspected:'证据 '+proofs.length+'/2';
-  $('energy').firstElementChild.style.width=energy+'%';$('act').textContent=mode==='rush'?'挥锤':'调查';
+  $('energy').firstElementChild.style.width=energy+'%';$('act').textContent=mode==='rush'?'':'调查';
   if(elapsed>tipUntil)$('hint').textContent=mode==='rush'?patrolHint():mode==='search'?'声源 '+direction(target.x,target.z)+'　·　点摆设翻找':proofs.length<2?'线索 '+direction(...(()=>{const o=objects.find(o=>o.kind==='proof'&&!o.used);return [o.x,o.z]})())+'　·　点绿色标签搜证':'点名字，对照证据指认'
 }
-function stopInput(){keys.clear();axis.x=axis.y=0;joy=null;queued=null;route=[];routeTarget=null;$('stick').firstElementChild.style.transform=''}
+let commandMark=null;
+function cancelCommand(){commandMark?.remove();commandMark=null;queued=null;route=[];routeTarget=null}
+function pointCommand(x,z,walker){
+  cancelCommand();
+  const [gx,gz]=walker?[walker.x,walker.z]:Districts.free(x,z);
+  queued={kind:walker?'walker':'strikePoint',x:gx,z:gz,walker,stuck:0};
+  commandMark=document.createElement('span');commandMark.className='float command';commandMark.textContent=walker?'⌖':'◎';$('marks').append(commandMark)
+}
+function stopInput(){keys.clear();axis.x=axis.y=0;joy=null;cancelCommand();$('stick').firstElementChild.style.transform=''}
 function move(dt){
   let dx=axis.x+(keys.has('d')||keys.has('arrowright')?1:0)-(keys.has('a')||keys.has('arrowleft')?1:0),dy=axis.y+(keys.has('s')||keys.has('arrowdown')?1:0)-(keys.has('w')||keys.has('arrowup')?1:0);
   let wx=dx*W.right.x+dy*W.down.x,wz=dx*W.right.z+dy*W.down.z;
-  if(Math.hypot(dx,dy)>.06)queued=null;else if(queued){
-    const d=dist(p,queued);if(d<(queued.kind==='floor'?.14:1.03)){const o=queued;queued=null;if(o.kind!=='floor')interact(o);return false}
-    if(routeTarget!==queued){route=Districts.route(p.x,p.z,queued.x,queued.z);routeTarget=queued}
-    while(route.length&&Math.hypot(route[0][0]-p.x,route[0][1]-p.z)<.11)route.shift();
-    const [tx,tz]=route[0]||[queued.x,queued.z],stride=Math.hypot(tx-p.x,tz-p.z)||1;
-    wx=(tx-p.x)/stride;wz=(tz-p.z)/stride;
-    if(route.length&&stride<dt*4.65){p.x=tx;p.z=tz;route.shift();return true}
+  let remaining=Infinity;
+  if(Math.hypot(dx,dy)>.06)cancelCommand();
+  else if(queued){
+    const order=queued,m=order.walker;
+    if(m){if(m.done||m.reaction||!mobs.includes(m)){cancelCommand();return false}
+      order.x=m.x;order.z=m.z}
+    const gap=dist(p,order),attackOrder=order.kind==='strikePoint'||!!m;
+    const crowded=order.kind==='strikePoint'&&mobs.some(other=>!other.done&&Math.hypot(other.x-order.x,other.z-order.z)<.88);
+    const range=m||crowded?Math.max(.94,(energy<10?.70:1)*reach()*.86):attackOrder?.17:order.kind==='floor'?.14:1.03;
+    if(gap<=range&&Districts.line(p.x,p.z,order.x,order.z)){
+      if(attackOrder){
+        if(strike||cool>0)return false;
+        if(gap>.025)p.yaw=Math.atan2(order.x-p.x,order.z-p.z);
+        cancelCommand();swing()
+      }else{cancelCommand();if(order.kind!=='floor')interact(order)}
+      return false
+    }
+    if(routeTarget!==order||m&&Math.hypot(order.x-order.planX,order.z-order.planZ)>.55){
+      route=Districts.route(p.x,p.z,order.x,order.z);routeTarget=order;
+      if(!route){cancelCommand();notice('那里走不到');return false}
+      order.planX=order.x;order.planZ=order.z
+    }
+    while(route.length&&Math.hypot(route[0][0]-p.x,route[0][1]-p.z)<.13)route.shift();
+    const [tx,tz]=route[0]||[order.x,order.z];remaining=Math.hypot(tx-p.x,tz-p.z);
+    wx=(tx-p.x)/(remaining||1);wz=(tz-p.z)/(remaining||1);
   }
-  const len=Math.hypot(wx,wz);if(len<.06)return false;const speed=dt*4.65/Math.max(1,len);const nextX=clamp(p.x+wx*speed,-22,22),nextZ=clamp(p.z+wz*speed,-15,15);
-  if(Districts.clear(nextX,p.z))p.x=nextX;if(Districts.clear(p.x,nextZ))p.z=nextZ;p.yaw=Math.atan2(wx,wz);return true
+  const len=Math.hypot(wx,wz);if(len<.06)return false;
+  const step=Math.min(dt*4.65,remaining)/Math.max(1,len);p.yaw=Math.atan2(wx,wz);
+  let moved=stepFoot(p,wx*step,wz*step,Boolean(queued));
+  if(!moved&&!queued)moved=(Math.abs(wx)>.01&&stepFoot(p,wx*step,0,false))||(Math.abs(wz)>.01&&stepFoot(p,0,wz*step,false));
+  if(queued&&!moved){queued.stuck=(queued.stuck||0)+dt;if(queued.stuck>.45){routeTarget=null;queued.stuck=0}}
+  return moved
 }
 function placeMarks(dt){
+  if(commandMark&&queued){const q=W.project(queued.x,queued.walker?2.34:.10,queued.z);
+    commandMark.style.left=q.x+'px';commandMark.style.top=q.y+'px'}
+
   for(const o of objects){const q=W.project(o.x,o.height+.12,o.z);o.el.hidden=!!chase||q.x<18||q.x>innerWidth-18||q.y<105||q.y>innerHeight-78;o.el.style.left=q.x+'px';o.el.style.top=q.y+'px'}
   for(const f of fx){f.age+=dt;const q=W.project(f.x,f.height+f.age*.75,f.z);f.el.style.left=q.x+'px';f.el.style.top=q.y+'px';f.el.style.opacity=Math.min(1,(f.life-f.age)*4);if(f.age>=f.life)f.el.remove()}
   fx=fx.filter(f=>f.age<f.life)
 }
 function sidebarActions(){const sidebar=window.patrolHost?.sidebar;return sidebar?.available?[['去抖音侧边栏',()=>sidebar.open()]]:[]}
 function pause(){
-  if(state!=='play'&&state!=='pause')return;state='pause';bufferSwing=false;music(false);options('巡查暂停',modes[mode][0],'拖动摇杆走路，面向目标按挥锤。',[['继续巡查',resume],['设置',settings],['重新开始',()=>begin('rush')],['重新选狗',home]])
+  if(state!=='play'&&state!=='pause')return;state='pause';bufferSwing=false;music(false);options('巡查暂停',modes[mode][0],'点路面或行人会走过去挥一锤。推动摇杆可取消。',[['继续巡查',resume],['设置',settings],['重新开始',()=>begin('rush')],['重新选狗',home]])
 
 }
 const scene=$('scene');
 scene.onpointerdown=e=>{if(joy||state!=='play')return;unlock();scene.setPointerCapture(e.pointerId);joy={id:e.pointerId,x:e.clientX,y:e.clientY,drag:false}}
 scene.onpointermove=e=>{if(!joy||joy.id!==e.pointerId)return;const dx=e.clientX-joy.x,dy=e.clientY-joy.y,d=Math.hypot(dx,dy);if(d>6)joy.drag=true;if(joy.drag){const radius=parseFloat($('stick').style.width)*.28,scale=Math.max(radius,d);axis={x:dx/scale,y:dy/scale};$('stick').firstElementChild.style.transform='translate('+axis.x*radius+'px,'+axis.y*radius+'px)'}}
 scene.onpointerup=e=>{if(!joy||joy.id!==e.pointerId)return;const tap=!joy.drag;stopInput();if(tap&&state==='play'){
-  const q=W.ground(e.clientX,e.clientY);if(!q)return;const nearby=objects.filter(o=>Math.hypot(q.x-o.x,q.z-o.z)<.9).sort((a,b)=>Math.hypot(q.x-a.x,q.z-a.z)-Math.hypot(q.x-b.x,q.z-b.z))[0];
+  const q=W.ground(e.clientX,e.clientY);if(!q)return;
+  if(mode==='rush'){pointCommand(q.x,q.z,W.pickWalker(e.clientX,e.clientY,mobs));return}
+  const nearby=objects.filter(o=>Math.hypot(q.x-o.x,q.z-o.z)<.9).sort((a,b)=>Math.hypot(q.x-a.x,q.z-a.z)-Math.hypot(q.x-b.x,q.z-b.z))[0];
   if(nearby)walkTo(nearby);else{const [x,z]=Districts.free(clamp(q.x,-22,22),clamp(q.z,-15,15));queued={kind:'floor',x,z}}
 }}
 scene.onpointercancel=stopInput;
@@ -335,7 +400,7 @@ function steerStick(e){
 stick.onpointerdown=e=>{
   if(state!=='play'||joy)return;
   unlock();const r=stick.getBoundingClientRect();stick.setPointerCapture?.(e.pointerId);
-  joy={id:e.pointerId,x:r.left+r.width/2,y:r.top+r.height/2,drag:true};queued=null;steerStick(e)
+  joy={id:e.pointerId,x:r.left+r.width/2,y:r.top+r.height/2,drag:true};cancelCommand();steerStick(e)
 };
 stick.onpointermove=steerStick;
 stick.onpointerup=stick.onpointercancel=e=>{if(joy?.id===e.pointerId)stopInput()};

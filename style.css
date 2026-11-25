@@ -19,3 +19,7 @@
 #act:active{filter:brightness(1.14);transform:scale(.96)}
 #hint{bottom:auto;top:calc(max(12px,env(safe-area-inset-top)) + 95px);padding:5px 10px;font-size:12px}
 @media(max-height:480px){#dogs button{background-size:auto 34px;padding-top:38px}.pick{padding:4px 8px}.pick>b{margin:0}#start{padding:4px 12px}}
+
+#act::before{width:85%;height:88%}
+
+.command{font-size:23px;color:#ffde73;transform:translate(-50%,-70%)}
