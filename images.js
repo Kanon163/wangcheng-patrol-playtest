@@ -30,5 +30,5 @@ const GameImages=(()=>{
     if(id==='rush')return [(ride?'ride-':'run-')+breed,'hammer-key',...six('local-'),...six('rogue-'),...six('shop-')];
     return [breed,'speaker','recycle','listen','quiet']
   }
-  return {load,bind,level,url,get:name=>ready.get(name)}
+  return {load,bind,level,url,clear:()=>ready.clear(),get:name=>ready.get(name)}
 })();

@@ -35,22 +35,31 @@ function loadSound(name){
 function loadSounds(){
   if(audio)for(const name of ['swish','thump','knock','knock-deep','stamp','patrol-loop','patrol-win','patrol-loss'])loadSound(name)
 }
-let resultSource=null,resultSequence=0;
+let resultSource=null,resultMedia=null,resultSequence=0;
 function stopResultMusic(){
   resultSequence++;
   if(window.patrolHost){window.patrolHost.resultMusic?.(null);return}
+  if(resultMedia){resultMedia.pause();resultMedia=null}
   if(resultSource){resultSource.stop();resultSource.disconnect();resultSource=null}
 }
 async function playResultMusic(win){
   stopResultMusic();
-  if(!save.sound||!save.music)return;
+  if(!save.sound)return;
   const name=win?'patrol-win':'patrol-loss',sequence=resultSequence;
   if(window.patrolHost){window.patrolHost.resultMusic?.(name);return}
-  if(!audio)return;
-  const buffer=await loadSound(name);
-  if(!buffer||sequence!==resultSequence||state!=='result')return;
-  resultSource=audio.createBufferSource();resultSource.buffer=buffer;
-  resultSource.connect(audio.destination);resultSource.start()
+  if(audio?.state==='running'){
+    const buffer=combatAudio.get(name)||await loadSound(name);
+    if(sequence!==resultSequence||state!=='result')return;
+    if(buffer&&audio.state==='running'){
+      resultSource=audio.createBufferSource();resultSource.buffer=buffer;
+      resultSource.connect(audio.destination);resultSource.start();return
+    }
+  }
+  try{
+    resultMedia=new Audio(window.patrolSounds?.[name]||'art/'+name+'.wav');
+    await resultMedia.play()
+  }catch{if(sequence===resultSequence)notice('点「播放结算音乐」再听一次')}
+
 }
 function music(playing){
   const enabled=Boolean(playing&&save.music&&save.sound);
@@ -72,7 +81,7 @@ function sfx(name){
   source.connect(audio.destination);source.start();
   if(musicSource&&name!=='swish'){const g=musicGain.gain,t=audio.currentTime;g.cancelScheduledValues(t);g.setValueAtTime(.26,t);g.linearRampToValueAtTime(.50,t+.22)}
 }
-function unlock(){if(!save.sound||window.patrolHost)return;try{audio ||=new(window.AudioContext||window.webkitAudioContext)();if(audio.state!=='running')audio.resume().catch(()=>{});loadSounds()}catch{}}
+function unlock(){if(!save.sound||window.patrolHost)return;try{if(window.navigator?.audioSession)window.navigator.audioSession.type="playback"}catch{}try{audio ||=new(window.AudioContext||window.webkitAudioContext)();if(audio.state!=='running')audio.resume().catch(()=>{});loadSounds()}catch{}}
 function notice(s){$('toast').textContent=s;toastUntil=performance.now()+1500}
 function options(stamp,title,desc,choices){
   stopInput();$('stamp').textContent=stamp;$('dialogTitle').textContent=title;$('desc').textContent=desc;$('options').replaceChildren();
@@ -80,7 +89,10 @@ function options(stamp,title,desc,choices){
 }
 function close(){ $('modal').hidden=true; }
 function clearMarks(){for(const o of [...objects,...fx,...drops])o.el?.remove();objects=[];mobs=[];drops=[];fx=[];chase=null;target=null;queued=null;$('marks').replaceChildren()}
+let showEntryRules=true;
 function home(){
+  showEntryRules=true;
+  $('start').textContent=gear.stage>1?'继续第 '+gear.stage+' 关':'开始游戏';
   clearMarks();stopInput();close();state='home';$('home').hidden=false;$('hud').hidden=true;$('toast').textContent='';
   W.buildStage('home');W.outfit(save.breed,{});W.equip(gear.weapon);W.snap();dogCards();layoutControls()
 }
@@ -122,6 +134,22 @@ function settings(){
     [save.music?'背景音乐 · 开':'背景音乐 · 关',()=>{save.music=!save.music;persist();settings()}],
     [save.calm?'轻动效 · 开':'轻动效 · 关',()=>{save.calm=!save.calm;persist();settings()}],
     ['返回',state==='pause'?pause:close]])
+}
+function manageGame(){
+  options('巡查站','重新开始与缓存','当前进度：敌潮第 '+gear.stage+' 关。',[
+    ['重新开始游戏',()=>options('重新开档','从第 1 关重新开始？','这会清除本游戏的关卡、代币、装备和角色选择，保留声音与操作设置。',[
+      ['保留进度',manageGame],['确认开新档',()=>{
+        const {sound,music,calm,stickScale,hammerScale}=save;
+        Rush.reset();save={...defaults,sound,music,calm,stickScale,hammerScale};persist();home();notice('新档已就绪')
+      }]
+    ])],
+    ['清理游戏缓存',()=>options('游戏缓存','重新加载游戏资源？','保留存档。重新加载后，仍可继续第 '+gear.stage+' 关。',[
+      ['取消',manageGame],['清理并重新加载',()=>{
+        if(window.patrolHost){GameImages.clear();loadScene('正在重新加载素材',Object.keys(Paper.breeds),home);return}
+        const url=new URL('play.html',window.location.href);url.searchParams.set('refresh',String(Date.now()));window.location.replace(url.href)
+      }]
+    ])],['返回',close]
+  ])
 }
 function dressed(){persist();W.outfit(save.breed,{});W.equip(gear.weapon)}
 const gear=Rush.profile;
@@ -201,7 +229,8 @@ function startLevel(id){
   }
   hud();
   W.animate(0,p,false,0,id==='rush'?gear.weapon:save.weapon,null);
-  if(id==='rush'&&wave<=3){
+  if(id==='rush'&&(wave<=3||showEntryRules)){
+    showEntryRules=false;
     state='briefing';
     options('敌潮 · 第 '+wave+' 关','本关巡查目标',
       '胜利：在 '+left+' 秒内制止 '+goalCount+' 起不文明行为。\n失败：续航时间到，或挥锤能量用尽时仍未完成目标。\n本关有 '+energy+' 点能量，每锤消耗 10 点，空挥和误击也会消耗。',
@@ -243,7 +272,7 @@ function finish(win,cause){
         state='result';result(msg)
       };
       const choices=win?[['进入第 '+gear.stage+' 关',()=>begin('rush')]]:[[watch?'看广告重来':'激励视频暂不可用',retry,!watch]];
-      choices.push(['装备升级',()=>shop()]);
+      choices.push(['装备升级',()=>shop()],[save.sound?'播放结算音乐':'开启声音并播放',()=>{if(!save.sound){save.sound=true;persist();unlock();result(msg)}playResultMusic(win)}]);
       options('敌潮 · 第 '+wave+' 关',why,[msg,win?'全部不文明行为已制止。':'还有 '+(goalCount-kills)+' 起不文明行为未制止。','已处理 '+kills+'/'+goalCount+'　误击 '+mistakes,'本关获得 '+kills*2+' 代币，已存入钱包'].filter(Boolean).join('\n'),choices)
     }
     result();return
@@ -523,7 +552,7 @@ function action(){if(state!=='play')return;if(mode==='rush'){
 }else{const n=nearest();if(n)walkTo(n)}}
 $('act').onpointerdown=e=>{if(mode==='rush'){e.stopPropagation();unlock();action()}};
 $('act').onclick=e=>{if(mode!=='rush'||!e||e.detail===0)action()};$('pause').onclick=pause;
-$('start').onclick=()=>begin('rush');$('settings').onclick=settings;$('shop').onclick=()=>shop();
+$('manage').onclick=manageGame;$('start').onclick=()=>begin('rush');$('settings').onclick=settings;$('shop').onclick=()=>shop();
 addEventListener('resize',layoutControls);
 addEventListener('keydown',e=>{const k=e.key.toLowerCase();if(state==='play'&&['arrowup','arrowdown','arrowleft','arrowright','w','a','s','d',' ','escape'].includes(k)){e.preventDefault();keys.add(k);if(!e.repeat&&k===' ')action();if(k==='escape')pause()}});
 addEventListener('keyup',e=>keys.delete(e.key.toLowerCase()));addEventListener('blur',()=>{stopInput();pause()});document.addEventListener('visibilitychange',()=>{if(document.hidden)pause()});

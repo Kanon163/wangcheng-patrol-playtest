@@ -2,8 +2,8 @@
 const Rush=(()=>{
   const key='wangcheng-rush-v2',weapons={'玩具锤':10,'黄瓜棒':12,'糖葫芦':14};
   function integer(n,fallback=0){return Number.isSafeInteger(n)&&n>=0?n:fallback}
-  function load(){
-    let raw={};try{raw=JSON.parse(localStorage.getItem(key))||{}}catch{}
+  function load(fresh=false){
+    let raw={};try{if(!fresh)raw=JSON.parse(localStorage.getItem(key))||{}}catch{}
     const levels={'玩具锤':Math.max(1,integer(raw.levels?.['玩具锤'],1))};
     for(const id of Object.keys(weapons))if(integer(raw.levels?.[id]))levels[id]=raw.levels[id];
     return {stage:Math.max(1,integer(raw.stage,1)),tokens:integer(raw.tokens),shards:integer(raw.shards),scooter:integer(raw.scooter),levels,weapon:levels[raw.weapon]?raw.weapon:'玩具锤'}
@@ -22,5 +22,6 @@ const Rush=(()=>{
   function upgrade(){const cost=profile.levels[profile.weapon]*2;if(profile.shards<cost)return;profile.shards-=cost;profile.levels[profile.weapon]++;store()}
   function ride(){const cost=(profile.scooter+1)*6;if(profile.tokens<cost)return;profile.tokens-=cost;profile.scooter++;store()}
   function reward(){profile.tokens+=2;store()}
-  return {profile,store,capacity,rules,draw,upgrade,ride,reward}
+  function reset(){Object.assign(profile,load(true));store()}
+  return {profile,reset,store,capacity,rules,draw,upgrade,ride,reward}
 })();
