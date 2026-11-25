@@ -25,7 +25,7 @@ function loadSounds(){
   if(!audio)return;
   for(const name of ['swish','thump','knock','knock-deep','stamp','patrol-loop']){
     if(combatAudio.has(name))continue;combatAudio.set(name,null);
-    fetch('art/'+name+(name==='patrol-loop'?'.mp3':'.wav')).then(r=>{if(!r.ok)throw Error();return r.arrayBuffer()})
+    fetch(window.patrolSounds?.[name]||'art/'+name+(name==='patrol-loop'?'.mp3':'.wav')).then(r=>{if(!r.ok)throw Error();return r.arrayBuffer()})
       .then(data=>audio.decodeAudioData(data)).then(buffer=>combatAudio.set(name,buffer)).catch(()=>combatAudio.delete(name))
   }
 }
@@ -53,7 +53,7 @@ function unlock(){if(!save.sound||window.patrolHost)return;try{audio ||=new(wind
 function notice(s){$('toast').textContent=s;toastUntil=performance.now()+1500}
 function options(stamp,title,desc,choices){
   stopInput();$('stamp').textContent=stamp;$('dialogTitle').textContent=title;$('desc').textContent=desc;$('options').replaceChildren();
-  choices.forEach(([label,cb,disabled,art])=>{const b=document.createElement('button');b.textContent=label;b.disabled=!!disabled;if(art){b.dataset.art=art;b.className='art-choice';b.style.backgroundImage='url("art/'+art+'.png")'}b.onclick=()=>{unlock();cb()};$('options').append(b)});$('modal').hidden=false
+  choices.forEach(([label,cb,disabled,art])=>{const b=document.createElement('button');b.textContent=label;b.disabled=!!disabled;if(art){b.dataset.art=art;b.className='art-choice';b.style.backgroundImage='url("'+GameImages.url(art)+'")'}b.onclick=()=>{unlock();cb()};$('options').append(b)});$('modal').hidden=false
 }
 function close(){ $('modal').hidden=true; }
 function clearMarks(){for(const o of [...objects,...fx,...drops])o.el?.remove();objects=[];mobs=[];drops=[];fx=[];chase=null;target=null;queued=null;$('marks').replaceChildren()}
@@ -67,7 +67,7 @@ function dogCards(){
     const card=document.createElement('button');
     card.dataset.art=id;card.dataset.selected=String(save.breed===id);card.textContent=name;
     card.setAttribute('aria-pressed',String(save.breed===id));
-    card.style.backgroundImage='url("art/'+id+'.png")';
+    card.style.backgroundImage='url("'+GameImages.url(id)+'")';
     card.onclick=()=>{save.breed=id;dressed();dogCards();tone(520)};
     cards.append(card)
   }
@@ -125,19 +125,25 @@ async function loadScene(title,names,start){
   const attempt=++loadAttempt;state='loading';music(false);
   $('hud').hidden=true;$('home').hidden=true;$('toast').textContent='';
   options('素材加载',title,'准备图片 0 / '+names.length,[]);
-  let count=0;
-  try{
-    await Promise.all(names.map(async name=>{
-      await GameImages.load(name);
+  window.patrolBoot?.started();
+  let count=0,next=0,building=false;
+  async function worker(){
+    while(next<names.length&&state==='loading'&&attempt===loadAttempt){
+      const name=names[next++];
+      try{await GameImages.load(name)}catch{if(attempt!==loadAttempt||state!=='loading')return;await GameImages.load(name,1)}
       if(attempt===loadAttempt&&state==='loading')$('desc').textContent='准备图片 '+(++count)+' / '+names.length
-    }))
+    }
+  }
+  try{
+    await Promise.all(Array.from({length:Math.min(4,names.length)},worker));
+    if(attempt!==loadAttempt)return;
+    building=true;start()
   }catch(error){
     if(attempt!==loadAttempt)return;
-    state='loadError';options('素材加载','图片未加载成功',error.message+'，请检查网络后重试。',[
-      ['重新加载',()=>loadScene(title,names,start)]]);
-    return
+    state='loadError';$('home').hidden=true;$('hud').hidden=true;
+    options('素材加载',building?'场景启动失败':'图片未加载成功',String(error.message||error),[
+      ['重新加载',()=>loadScene(title,names,start)]])
   }
-  if(attempt===loadAttempt)start()
 }
 function begin(id){
   if(state==='loading')return;unlock();

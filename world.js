@@ -1,7 +1,9 @@
 /* 固定斜视相机，纸片角色与分区三维场景。 */
 const World = (() => {
   const T = THREE, canvas = document.querySelector('#scene');
-  const renderer = new T.WebGLRenderer({canvas,antialias:true,alpha:false,powerPreference:'high-performance'});
+  let renderer,flat;
+  try{renderer=new T.WebGLRenderer({canvas,antialias:true,alpha:false,powerPreference:'default'})}
+  catch(error){if(window.patrolHost)throw error;flat=canvasView(canvas);renderer=flat}
   window.patrolHost?.attachRenderer(renderer);
   renderer.setPixelRatio(Math.min(devicePixelRatio,1.7));
   const scene = new T.Scene(), camera = new T.OrthographicCamera();
@@ -164,7 +166,7 @@ const World = (() => {
       for(const {b,x,z,w,d,h} of buildings){const dx=x-p.x,dz=z-p.z,depth=.625*dx+.781*dz;
         const occluding=depth>0&&depth<h+3&&Math.abs(dx*.781-dz*.625)<w*.36+d*.29+.32;
         b.scale.y+=((occluding?.24:1)-b.scale.y)*(1-Math.exp(-dt*16))}
-    }else Paper.pose(rig,t,moving,swing,home);renderer.render(scene,camera)
+    }else Paper.pose(rig,t,moving,swing,home);if(flat)flat.draw(scene,camera,stage,actors,dog,rig,look,home,weapon);else renderer.render(scene,camera)
   }
   function equip(name){const colors=name==='黄瓜棒'?['#458755','#8bb756']:name==='糖葫芦'?['#b52a3e','#f17a50']:['#cf5147','#ffcb4a'];
     // Keep the handle, replace the head with the selected silhouette.

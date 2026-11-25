@@ -1,7 +1,25 @@
 <!doctype html>
-<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1"><meta name="theme-color" content="#173c40"><link rel="icon" href="data:,"><title>汪！文明巡查队</title><link rel="stylesheet" href="style.css?v=load1"></head>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1"><meta name="theme-color" content="#173c40"><link rel="icon" href="data:,"><title>汪！文明巡查队</title><link rel="stylesheet" href="style.css?v=boot2"></head>
 <body><main id="game"><canvas id="scene" aria-label="汪城街区，点目的地前往，拖动控制小狗"></canvas><div id="marks"></div>
 <section id="home" hidden><header><div class="station">汪城街区　<span>✦</span>　巡查站</div><h1>汪！<br><strong>文明巡查队</strong></h1></header><nav aria-label="选择巡查员"><div class="pick"><b>选择狗狗</b><div id="dogs" role="group" aria-label="巡查员"></div></div><button id="start">开始游戏 <span>➜</span></button><div class="navfoot"><button id="shop">武器与成长</button><button id="settings">设置</button></div></nav></section>
 <section id="hud" hidden><div class="top"><div class="objective"><small id="modeName"></small><b id="objective"></b></div><button id="pause" aria-label="暂停">Ⅱ</button></div><div class="bars"><b id="time"></b><span id="status"></span><span id="energy"><i></i></span></div><div id="hint"></div><div id="stick"><i></i></div><button id="act" aria-label="挥锤"></button></section>
 <section id="modal"><article role="dialog" aria-modal="true" aria-labelledby="dialogTitle"><small id="stamp"></small><h2 id="dialogTitle">正在打开巡查站</h2><div id="desc"></div><div id="options"></div></article></section><div id="toast" role="status"></div></main>
-<script src="vendor/three.min.js"></script><script src="images.js?v=load1"></script><script src="paper.js?v=load1"></script><script src="street-art.js?v=load1"></script><script src="street.js?v=load1"></script><script src="cels.js?v=load1"></script><script src="districts.js?v=load1"></script><script src="world.js?v=load1"></script><script src="rush.js?v=load1"></script><script src="game.js?v=load1"></script></body></html>
+<script>
+(function(){
+  var active=true, timer=setTimeout(function(){show('游戏程序下载时间较长');},15000);
+  function show(reason){
+    if(!active)return;
+    document.getElementById('dialogTitle').textContent='巡查站还没打开';
+    document.getElementById('desc').textContent=reason;
+    var box=document.getElementById('options');box.textContent='';
+    var btn=document.createElement('button');btn.textContent='重新打开完整试玩版';
+    btn.onclick=function(){location.href='play.html?retry='+Date.now()};box.appendChild(btn)
+  }
+  window.addEventListener('error',function(e){
+    if(e.target&&e.target.tagName==='SCRIPT')show('程序下载失败，请重试。');
+    else if(e.message)show(e.message)
+  },true);
+  window.patrolBoot={started:function(){active=false;clearTimeout(timer)}}
+})();
+</script>
+<script src="vendor/three.min.js"></script><script src="images.js?v=boot2"></script><script src="paper.js?v=boot2"></script><script src="street-art.js?v=boot2"></script><script src="street.js?v=boot2"></script><script src="cels.js?v=boot2"></script><script src="districts.js?v=boot2"></script><script src="canvas-view.js?v=boot2"></script><script src="world.js?v=boot2"></script><script src="rush.js?v=boot2"></script><script src="game.js?v=boot2"></script></body></html>
