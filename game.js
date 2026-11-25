@@ -10,8 +10,8 @@ let save;try{save={...defaults,...JSON.parse(localStorage.getItem(key)||'{}')}}c
 function persist(){try{localStorage.setItem(key,JSON.stringify(save))}catch{}}
 const colors={red:'橘色',blue:'海水蓝',green:'青草绿'};
 let state='home', mode, p, objects=[], mobs=[], drops=[], fx=[], elapsed=0,left=0,kills=0,energy=100,hit=0,cool=0,spawn=0,beat=0, target=null, inspected=0, proofs=[], culprit, chase=null, combo=0,queued=null,now=0,toastUntil=0,tipUntil=0;
-let zoneHits=0,crowdDecks;
-let district,order=100,mistakes=0,arrivals=0,zoneIndex=1,strike=null,freeze=0,impactPulse=0,impactPower=0,bufferSwing=false,route=[],routeTarget=null;
+let crowdDecks;
+let district,mistakes=0,strike=null,freeze=0,impactPulse=0,impactPower=0,bufferSwing=false,route=[],routeTarget=null;
 let audio,joy=null,axis={x:0,y:0},keys=new Set(),bird=null,talentClock=0;
 function tone(freq=390,len=.08,kind='triangle',vol=.035){
   if(window.patrolHost){if(save.sound)window.patrolHost.playTone(freq,vol);return}
@@ -59,7 +59,7 @@ function close(){ $('modal').hidden=true; }
 function clearMarks(){for(const o of [...objects,...fx,...drops])o.el?.remove();objects=[];mobs=[];drops=[];fx=[];chase=null;target=null;queued=null;$('marks').replaceChildren()}
 function home(){
   clearMarks();stopInput();close();state='home';$('home').hidden=false;$('hud').hidden=true;$('toast').textContent='';
-  W.buildStage('home');W.outfit(save.breed,{});W.equip(save.weapon);W.snap();dogCards();layoutControls()
+  W.buildStage('home');W.outfit(save.breed,{});W.equip(gear.weapon);W.snap();dogCards();layoutControls()
 }
 function dogCards(){
   const cards=$('dogs');cards.replaceChildren();
@@ -100,25 +100,19 @@ function settings(){
     [save.calm?'轻动效 · 开':'轻动效 · 关',()=>{save.calm=!save.calm;persist();settings()}],
     ['返回',state==='pause'?pause:close]])
 }
-function dressed(){persist();W.outfit(save.breed,{});W.equip(save.weapon)}
-function shop(){
-  const offers=[['玩具锤',0,'横扫'],['黄瓜棒',9,'攻速快'],['糖葫芦',15,'范围大']];
-  const choices=offers.map(([name,price,detail])=>[save.weapon===name?'✓ '+name+' · '+detail:save.owned.includes(name)?'装备 '+name:name+' · '+price+' 金币 · '+detail,()=>{
-    if(!save.owned.includes(name)){if(save.coins<price)return;save.coins-=price;save.owned.push(name)}
-    save.weapon=name;persist();W.equip(name);shop()
-  },save.weapon===name||!save.owned.includes(name)&&save.coins<price]);
-  const cost=8+save.skill*5;
-  choices.push([save.skill>=3?'巡查耐力已满':'训练耐力 '+save.skill+'/3 · '+cost+' 金币',()=>{if(save.coins>=cost&&save.skill<3){save.coins-=cost;save.skill++;persist();shop()}},save.skill>=3||save.coins<cost]);
-  if(save.skill>0){
-    for(const [id,text] of [['magic','回声魔法 · 更快循声 / 每六秒强化一次劝阻'],['bird','巡查鸽 · 跟随巡查 / 定时补能']]){
-      choices.push([(save.talent===id?'✓ ':save[id]?'启用 ':'解锁 · 12 金币　')+text,()=>{
-        if(!save[id]){if(save.coins<12)return;save.coins-=12;save[id]=true}
-        save.talent=id;persist();shop()
-      },save.talent===id||!save[id]&&save.coins<12])
-    }
-  }
-  choices.push(['返回',close]);
-  options('巡查装备室','金币 '+save.coins,'耐力提高回能速度；一级耐力解锁回声魔法和巡查鸽两条分支。',choices)
+function dressed(){persist();W.outfit(save.breed,{});W.equip(gear.weapon)}
+const gear=Rush.profile;
+let wave=1,goalCount=0,spawned=0;
+function shop(message=''){
+  const price=gear.levels[gear.weapon]*2,ridePrice=(gear.scooter+1)*6;
+  const actions=[
+    ['抽扭蛋 · 3代币',()=>shop(Rush.draw()),gear.tokens<3],
+    ['升级'+gear.weapon+' · '+price+'碎片',()=>{Rush.upgrade();shop('武器已升级，下一局能量增加40')},gear.shards<price],
+    [(gear.scooter?'升级':'解锁')+'滑板车 · '+ridePrice+'代币',()=>{Rush.ride();shop('滑板车续航 +12 秒')},gear.tokens<ridePrice,'scooter']
+  ];
+  for(const id of Object.keys(gear.levels))if(id!==gear.weapon)actions.push(['装备'+id,()=>{gear.weapon=id;Rush.store();shop()}]);
+  actions.push(['开始第 '+gear.stage+' 关',()=>begin('rush')],['返回巡查站',home]);
+  options('敌潮装备室','装备升级',[message,'代币 '+gear.tokens+'　武器碎片 '+gear.shards,gear.weapon+' Lv.'+gear.levels[gear.weapon]+'　能量 '+Rush.capacity(),'滑板车 Lv.'+gear.scooter+'　额外续航 '+gear.scooter*12+' 秒','扭蛋：有未获得的武器时，8% 获得整件，其余为碎片。'].filter(Boolean).join('\n'),actions)
 }
 function mark(o,txt,cl=''){const b=document.createElement('button');b.className='marker '+cl;b.textContent=txt;b.setAttribute('aria-label',txt);b.onpointerdown=e=>e.stopPropagation();b.onclick=()=>{if(state==='play')walkTo(o)};$('marks').append(b);o.el=b}
 function addObj(kind,name,pos,mesh,height=1,tint=''){
@@ -128,7 +122,7 @@ function floating(text,x,z,height=1.15,life=.75){const el=document.createElement
 function instruction(txt,sec=3){$('hint').textContent=txt;tipUntil=elapsed+sec}
 function begin(id){
   unlock();clearMarks();stopInput();close();mode=id;state='play';elapsed=0;left=modes[id][2];kills=0;inspected=0;energy=100;beat=1;cool=0;hit=0;spawn=.2;combo=0;proofs=[];
-  p={x:0,z:0,yaw:.48};district=W.buildStage(id);order=100;mistakes=0;arrivals=0;zoneIndex=0;zoneHits=0;crowdDecks=[[],[]];strike=null;freeze=impactPulse=0;bufferSwing=false;[p.x,p.z]=id==='rush'?Street.nodes[0]:Districts.free(0,0);if(id==='rush')p.yaw=Math.PI/2;W.equip(save.weapon);bird=save.talent==='bird'?W.bird():null;talentClock=3;W.snap(p);$('home').hidden=true;$('hud').hidden=false;$('modeName').textContent=district.name+' · '+modes[id][1];$('toast').textContent='';
+  p={x:0,z:0,yaw:.48};district=W.buildStage(id);mistakes=0;crowdDecks=[[],[]];strike=null;freeze=impactPulse=0;bufferSwing=false;[p.x,p.z]=id==='rush'?Street.nodes[0]:Districts.free(0,0);if(id==='rush')p.yaw=Math.PI/2;W.equip(id==='rush'?gear.weapon:save.weapon);bird=id!=='rush'&&save.talent==='bird'?W.bird():null;talentClock=3;W.snap(p);$('home').hidden=true;$('hud').hidden=false;$('modeName').textContent=district.name+' · '+modes[id][1];$('toast').textContent='';
   const spots=shuffle([[-9,-5],[-4,3],[.6,-.4],[5,5],[10,-3],[2,9]]).map(([x,z])=>Districts.free(x+rand(-1,1),z+rand(-.8,.8)));
   if(id==='search'){
     const names=shuffle(district.items);
@@ -144,7 +138,14 @@ function begin(id){
     addObj('proof','查监控',spots[3],W.prop('报刊架',2),1.2,'clue').fact='监控反光，外套只看得出是'+shuffle([colors[culprit.color],colors[other.color]]).join('或')+'。';
     addObj('proof','问目击者',spots[4],W.citizen('quiet'),2,'clue').fact='目击者：“'+other.item+'的那位一直排在我身后，我可以替这位作证。”';
     instruction('有人插队！点线索搜证，点名字问话。',5)
-  }else{for(let i=0;i<8;i++)addMob(true);addMob(false,true);instruction('点地面或行人，走近挥锤。到金圈制止捣乱者，集齐八枚巡章。',4)}
+  }else{
+    wave=gear.stage;const rules=Rush.rules(wave);goalCount=rules.count;left=rules.seconds;energy=Rush.capacity();spawned=0;
+    W.goal(Street.checkpoints.length);
+    for(let i=0;i<goalCount;i++)addMob(false,true);
+    for(let i=0;i<7;i++)addMob(true);
+    $('modeName').textContent='敌潮 · 第 '+wave+' 关';
+    instruction(wave<4?'认准不文明行为再出锤，每锤消耗10能量。':'大个子需要连续击中，留意剩余能量。',4)
+  }
   hud()
 }
 function walkTo(o){if(!o||state!=='play')return;unlock();stopInput();queued=o;
@@ -170,27 +171,27 @@ function interact(o){
 }
 function resume(){close();state='play';stopInput()}
 function finish(win){
-  if(state!=='play')return;state='result';stopInput();const earned=mode==='rush'?Math.max(0,Math.min(24,kills*2)-mistakes):win?8:0;
-  save.coins+=earned;save.rounds++;persist();tone(win?700:160,.18);hud();
-  
-  const title=win?(mode==='rush'?'全街巡查完成！':mode==='search'?'外放者戴上了耳机！':'插队者乖乖排队！'):mode==='rush'?(order<=0?'街区秩序失守':'收队时间到了'):'巡查时间到';
-  const result=mode==='rush'?'巡章 '+zoneIndex+'/'+Street.checkpoints.length+'，制止 '+kills+' 次，误击 '+mistakes+' 次。':win?'用时 '+Math.ceil(elapsed)+' 秒。':'线索重新洗牌，再巡查一次。';
-  const choices=[['再巡一次',()=>begin('rush')],['重新选狗',home]];
-  let bonus=false,pending=false;
-  function receipt(){
-    const actions=[...choices];
-    if(earned>0&&window.patrolHost?.watchReward&&!bonus)actions.push(['▶ 看广告再领 '+earned+' 金币',async()=>{
-      if(pending||bonus)return;pending=true;
-      options('巡查结算','广告加载中','完成后可领取额外金币。',[]);
-      try{if(await window.patrolHost.watchReward()){bonus=true;save.coins+=earned;persist()}else notice('已保留基础金币')}
-      catch{notice('广告暂不可用，基础金币已保留')}
-      finally{pending=false;receipt()}
-    }]);
-    options('巡查结算',title,result+'\n本次金币 +'+earned+(bonus?'　广告奖励 +'+earned:'')+'　钱包 '+save.coins,actions)
+  if(mode==='rush'){
+    if(state!=='play')return;state='result';stopInput();music(false);tone(win?700:160,.18);
+    if(win){gear.stage=Math.max(gear.stage,wave+1);Rush.store()}
+    const watch=window.patrolHost?.watchReward,why=win?'街区清理完成':left<=0?'续航时间耗尽':'锤子能量耗尽';
+    function result(msg=''){
+      const retry=async()=>{if(state!=='result'||!watch)return;state='rewardPending';
+        options('敌潮','等待激励视频','完整观看后重开本关',[]);
+        try{if(await watch()){begin('rush');return}msg='视频未完成'}catch{msg='视频暂未加载'}
+        state='result';result(msg)
+      };
+      const choices=win?[['进入第 '+gear.stage+' 关',()=>begin('rush')]]:[[watch?'看广告重来':'激励视频暂不可用',retry,!watch]];
+      choices.push(['装备升级',()=>shop()]);
+      options('敌潮 · 第 '+wave+' 关',why,[msg,'已处理 '+kills+'/'+goalCount+'　误击 '+mistakes,'本关获得 '+kills*2+' 代币，已存入钱包'].filter(Boolean).join('\n'),choices)
+    }
+    result();return
   }
-  receipt()
+  if(state!=='play')return;state='result';stopInput();const earned=win?8:0;
+  save.coins+=earned;save.rounds++;persist();
+  options('巡查结算',win?'巡查完成':'巡查时间到','获得 '+earned+' 金币',[['再玩一次',()=>begin(mode)],['返回',home]])
 }
-function streetPoint(){return Street.nodes[Street.checkpoints[zoneIndex%Street.checkpoints.length]]}
+
 // 先检查本帧已占用的脚底位置，再提交位移。避让不会把旁人推向墙体。
 function openFoot(actor,x,z){
   if(!Districts.clear(x,z))return false;
@@ -205,10 +206,11 @@ function stepFoot(actor,dx,dz,steer){
   return false
 }
 function addMob(opening=false,incident=false){
-  const i=arrivals++,node=Street.checkpoints[zoneIndex%Street.checkpoints.length],start=incident?node:opening&&i<2?0:Math.random()<.35?node:Math.floor(rand(0,Street.nodes.length));
-  const [sx,sz]=Street.nodes[start],lane=rand(-.72,.72),bad=incident||((opening?i%3===1:Math.random()<.36)),deck=crowdDecks[bad?1:0];
+  const slot=spawned%Math.min(Street.checkpoints.length,Math.ceil(goalCount/2));
+  const node=Street.checkpoints[slot],start=incident?node:opening&&mobs.filter(m=>!m.bad).length<2?0:Math.floor(rand(0,Street.nodes.length));
+  const [sx,sz]=Street.nodes[start],lane=rand(-.72,.72),bad=incident,deck=crowdDecks[bad?1:0];
   if(!deck.length)deck.push(...shuffle([0,1,2,3,4,5]));
-  const type=incident?Street.incidents[(zoneIndex+zoneHits)%Street.incidents.length]:deck.pop();
+  const type=deck.pop();
   let x,z,placed=false;
   for(let n=0;n<32;n++){
     x=sx+rand(-1.85,1.85);z=sz+rand(-1.85,1.85);
@@ -218,14 +220,16 @@ function addMob(opening=false,incident=false){
   const footpath=bad?lane:(lane<0?-1:1)*rand(.75,1.17);
   const mesh=W.pedestrian((bad?'rogue-':'local-')+type),next=Street.neighbor(start,-1);
   const m={mesh,x,z,type,bad,incident,origin:start,node:start,next,lane:footpath,age:0,speed:rand(.82,1.38),wait:rand(0,.65),phase:rand(0,8),facing:1,reaction:0,done:false,visits:0};
+  m.hp=incident&&wave>=4&&spawned%2===0?3:1;
+  if(m.hp>1)mesh.scale.setScalar(1.32);
+  if(incident)spawned++;
   mobs.push(m);W.place(mesh,x,z)
 }
-function drop(x,z){const el=document.createElement('span');el.className='float';el.textContent='✦';$('marks').append(el);drops.push({x,z,el,age:0})}
+
 function swing(){
-  if(strike||cool>0){if(freeze>0||strike?.age>.27||cool>0)bufferSwing=true;return}const tired=energy<10;
-  const magic=save.talent==='magic'&&talentClock<=0;
-  if(magic)talentClock=6;else energy=Math.max(0,energy-10);
-  strike={age:0,yaw:p.yaw,contact:false,magic,tired};sfx('swish')
+  if(strike||cool>0){if(freeze>0||strike?.age>.27||cool>0)bufferSwing=true;return}if(energy<=0)return;
+  energy=Math.max(0,energy-10);
+  strike={age:0,yaw:p.yaw,contact:false,magic:false,tired:false};sfx('swish')
 }
 function contact(){
   const forwardX=Math.sin(strike.yaw),forwardZ=Math.cos(strike.yaw);
@@ -235,25 +239,19 @@ function contact(){
   if(!targets.length)return;
   const force=villains.length?(villains.length>1||strike.magic?1:.76):.37;
   freeze=villains.length?(.057+.048*force):.056;impactPower=force;impactPulse=.23;
-  sfx(villains.length?(kills%2||force===1?'knock-deep':'knock'):'thump');let atCheckpoint=0;
+  sfx(villains.length?(kills%2||force===1?'knock-deep':'knock'):'thump');
   for(const m of targets){m.reaction=.52;m.pushX=forwardX;m.pushZ=forwardZ;
     W.pedestrianPose(m,m.type>=3?4:m.bad?2:4,!save.calm,0,true);
-    if(m.bad){kills++;drop(m.x,m.z);order=Math.min(100,order+4);
-      const [gx,gz]=streetPoint();if(Math.hypot(p.x-gx,p.z-gz)<3.2)atCheckpoint++;
-    }else{mistakes++;order=Math.max(0,order-6);floating('打错啦！',m.x,m.z,1.6)}
-  }
-  if(villains.length){const m=villains[0];floating(strike.magic?'汪！':villains.length>1?'一锤 ×'+villains.length:'嘭！',m.x,m.z,1.55,.48)}
-  if(kills>=6)combo=1;
-  zoneHits+=atCheckpoint;
-  if(atCheckpoint&&zoneHits<Street.quotas[zoneIndex])instruction('本站已制止 '+zoneHits+'/'+Street.quotas[zoneIndex]+'，留意下一个捣乱者',2);
-  if(atCheckpoint&&zoneHits>=Street.quotas[zoneIndex]){zoneHits=0;sfx('stamp');zoneIndex++;W.goal(zoneIndex);for(const m of mobs){if(m.incident){m.incident=false;m.path=null;m.next=Street.neighbor(m.node,-1)}}
-    if(zoneIndex<Street.checkpoints.length){addMob(false,true);instruction('巡章到手！去'+Street.names[zoneIndex]+'。',2.4)}
+    if(m.bad){
+      m.hp--;if(m.hp===0){kills++;Rush.reward();floating('+2 代币',m.x,m.z,1.6)}
+      else floating('还需 '+m.hp+' 锤',m.x,m.z,2.3)
+    }else{mistakes++;floating('打错啦！',m.x,m.z,1.6)}
   }
 }
 function survival(dt,wall){
   impactPulse=Math.max(0,impactPulse-wall);
-  if(strike){strike.age+=dt;if(strike.age>=.125&&!strike.contact){strike.age=.125;strike.contact=true;contact()}
-    if(strike.age>(strike.tired?.56:save.weapon==='黄瓜棒'?.33:.43)){strike=null;cool=.025;if(zoneIndex>=Street.checkpoints.length){finish(true);return}}}
+  if(strike){strike.age+=dt;if(strike.age>=.125&&!strike.contact){strike.age=.125;strike.contact=true;contact();if(kills===goalCount||energy<=0){finish(kills===goalCount);return}}
+    if(strike.age>(strike.tired?.56:gear.weapon==='黄瓜棒'?.33:.43)){strike=null;cool=.025;}}
   if(freeze>0)return;
   if(!strike&&cool<=0&&bufferSwing){bufferSwing=false;swing()}
   spawn-=dt;if(spawn<=0){if(mobs.length<30)addMob();spawn=1.13}
@@ -263,7 +261,7 @@ function survival(dt,wall){
       stepFoot(m,dx,dz,false);
       const squash=m.reaction>.33,frame=m.type>=3?(squash?4:m.reaction>.16?5:6):(m.bad?2:4)+(squash?0:1);
       W.pedestrianPose(m,frame,!save.calm&&m.reaction>.47,save.calm?0:Math.sin((.52-m.reaction)*58)*Math.pow(m.reaction/.52,2),m.reaction>.34);
-      if(!m.reaction){if(m.bad)m.done=true;else m.wait=1.5}
+      if(!m.reaction){if(m.bad&&m.hp===0)m.done=true;else m.wait=.45}
     }else{
       const dest=m.incident?m.origin:m.next,[cx,cz]=Street.nodes[dest];
       const tx=cx+(m.incident?(m.visits%2?1:-1)*1.15:m.lane),tz=cz+m.lane;
@@ -291,11 +289,7 @@ function survival(dt,wall){
     if(m.done)W.dispose(m.mesh)
   }
   mobs=mobs.filter(m=>!m.done);
-  if(zoneIndex<Street.checkpoints.length&&!mobs.some(m=>m.incident&&!m.reaction))addMob(false,true);
-  if(order<=0){finish(false);return}
-  for(const d of drops){d.age+=dt;if(dist(p,d)<1.3){energy=Math.min(100,energy+12);d.age=20;tone(580,.045,'sine',.013)}
-    const q=W.project(d.x,.4+Math.sin(elapsed*4)*.08,d.z);d.el.style.left=q.x+'px';d.el.style.top=q.y+'px';if(d.age>9)d.el.remove()}
-  drops=drops.filter(d=>d.age<=9)
+  if(spawned<goalCount)addMob(false,true)
 }
 function direction(x,z){
   const dx=x-p.x,dz=z-p.z,screenX=dx*W.right.x+dz*W.right.z,screenY=dx*W.down.x+dz*W.down.z;
@@ -312,14 +306,21 @@ function scan(dt){
 }
 const streetActions=[['捡拾垃圾','牵绳遛狗','扶人过街'],['公共场所吸烟','随地吐痰','乱甩湿伞']];
 function patrolHint(){
-  if(energy<18)return '体力低，捡星回能';
+  if(energy<=20)return '能量仅剩 '+energy+'，看准再挥锤';
   let closest=null,range=2.6;
   for(const m of mobs){if(m.type<3||m.reaction||m.done)continue;const distance=dist(p,m);if(distance<range){closest=m;range=distance}}
   return closest?'街头见闻 · '+streetActions[closest.bad?1:0][closest.type-3]:'点路面或行人挥锤 · 摇杆接管'
 }
 function hud(){
-  if(!p)return;$('objective').textContent=mode==='rush'?(zoneIndex>=Street.checkpoints.length?'巡章已集齐':Street.names[zoneIndex]+' '+(Math.hypot(p.x-streetPoint()[0],p.z-streetPoint()[1])<3.2?'· 制止 '+zoneHits+'/'+Street.quotas[zoneIndex]:direction(...streetPoint())+' '+Math.ceil(Math.hypot(p.x-streetPoint()[0],p.z-streetPoint()[1]))+'m')):mode==='search'?'循着铃声找出外放者':'找出插队还说谎的人';
-  $('time').textContent='◷ '+Math.ceil(Math.max(0,left))+'s';$('status').textContent=mode==='rush'?'巡章 '+zoneIndex+'/'+Street.checkpoints.length+' · 制止 '+kills:mode==='search'?'已排除 '+inspected:'证据 '+proofs.length+'/2';
+  if(mode==='rush'){
+    const target=mobs.filter(m=>m.bad&&m.hp>0).sort((a,b)=>dist(p,a)-dist(p,b))[0];
+    $('objective').textContent=target?'发现线索 '+direction(target.x,target.z)+' '+Math.ceil(dist(p,target))+'m':'巡查中';
+    $('time').textContent='续航 '+Math.ceil(Math.max(0,left))+'s';$('status').textContent='制止 '+kills+'/'+goalCount+' · 能量 '+energy;
+    $('energy').firstElementChild.style.width=100*energy/Rush.capacity()+'%';
+    if(elapsed>tipUntil)$('hint').textContent=patrolHint();return
+  }
+  if(!p)return;$('objective').textContent=mode==='search'?'循着铃声找出外放者':'找出插队还说谎的人';
+  $('time').textContent='◷ '+Math.ceil(Math.max(0,left))+'s';$('status').textContent=mode==='search'?'已排除 '+inspected:'证据 '+proofs.length+'/2';
   $('energy').firstElementChild.style.width=energy+'%';$('act').textContent=mode==='rush'?'':'调查';
   if(elapsed>tipUntil)$('hint').textContent=mode==='rush'?patrolHint():mode==='search'?'声源 '+direction(target.x,target.z)+'　·　点摆设翻找':proofs.length<2?'线索 '+direction(...(()=>{const o=objects.find(o=>o.kind==='proof'&&!o.used);return [o.x,o.z]})())+'　·　点绿色标签搜证':'点名字，对照证据指认'
 }
@@ -405,27 +406,28 @@ stick.onpointerdown=e=>{
 stick.onpointermove=steerStick;
 stick.onpointerup=stick.onpointercancel=e=>{if(joy?.id===e.pointerId)stopInput()};
 
-function reach(){return (save.weapon==='糖葫芦'?2.3:1.6)+(combo?.28:0)}
+function reach(){return (gear.weapon==='糖葫芦'?2.3:1.6)+(combo?.28:0)}
 function action(){if(state!=='play')return;if(mode==='rush'){
   swing()
 }else{const n=nearest();if(n)walkTo(n)}}
 $('act').onpointerdown=e=>{if(mode==='rush'){e.stopPropagation();unlock();action()}};
 $('act').onclick=e=>{if(mode!=='rush'||!e||e.detail===0)action()};$('pause').onclick=pause;
-$('start').onclick=()=>begin('rush');$('settings').onclick=settings;$('shop').onclick=shop;
+$('start').onclick=()=>begin('rush');$('settings').onclick=settings;$('shop').onclick=()=>shop();
 addEventListener('resize',layoutControls);
 addEventListener('keydown',e=>{const k=e.key.toLowerCase();if(state==='play'&&['arrowup','arrowdown','arrowleft','arrowright','w','a','s','d',' ','escape'].includes(k)){e.preventDefault();keys.add(k);if(!e.repeat&&k===' ')action();if(k==='escape')pause()}});
 addEventListener('keyup',e=>keys.delete(e.key.toLowerCase()));addEventListener('blur',()=>{stopInput();pause()});document.addEventListener('visibilitychange',()=>{if(document.hidden)pause()});
 let last=performance.now();function loop(ts){
   const wall=Math.max(0,(ts-last)/1000);let dt=Math.min(.08,wall);last=ts;if(state==='play'&&mode==='rush'&&freeze>0){freeze=Math.max(0,freeze-wall);dt=0}let moving=false;
-  if(state==='play'){elapsed+=wall;left-=wall;hit=Math.max(0,hit-dt);cool=Math.max(0,cool-dt);energy=Math.min(100,energy+dt*(9+save.skill*2));
-    if(!chase&&dt>0&&(!strike||strike.age>.25))moving=move(dt);if(state==='play'){
+  if(state==='play'){elapsed+=wall;left-=wall;hit=Math.max(0,hit-dt);cool=Math.max(0,cool-dt);if(mode!=='rush')energy=Math.min(100,energy+dt*(9+save.skill*2));
+    if(left<=0&&mode==='rush'){finish(false)}
+    if(state==='play'&&!chase&&dt>0&&(!strike||strike.age>.25))moving=move(dt);if(state==='play'){
       talentClock-=dt;
       if(bird){bird.position.set(p.x-.7,1.22+Math.sin(elapsed*5)*.13,p.z+.18);bird.rotation.y=p.yaw;
         if(talentClock<=0){energy=Math.min(100,energy+18);talentClock=5;floating('补给',p.x-.6,p.z,1.5)}}
       
-      if(mode==='rush')survival(dt,wall);else scan(dt);if(left<=0&&state==='play'&&!chase)finish(mode==='rush'&&zoneIndex>=Street.checkpoints.length);hud()}}
+      if(mode==='rush')survival(dt,wall);else scan(dt);if(left<=0&&state==='play'&&!chase)finish(false);hud()}}
   music(state==='play'&&mode==='rush'&&!document.hidden);
-  W.animate(state==='home'||state==='play'?dt:0,p,moving,Math.min(1,hit/.38),save.weapon,mode==='rush'?{step:strike?(strike.age<.065?4:strike.age<.125?5:strike.age<.25?6:7):null,direction:strike?Math.sign(Math.sin(strike.yaw)*W.right.x+Math.cos(strike.yaw)*W.right.z):0,shake:save.calm?0:impactPower*(impactPulse/.23)**2*Math.sin((.23-impactPulse)*58),progress:strike?strike.age:0}:null);if(state!=='home')placeMarks(state==='play'?dt:0);
+  W.animate(state==='home'||state==='play'?dt:0,p,moving,Math.min(1,hit/.38),mode==='rush'?gear.weapon:save.weapon,mode==='rush'?{step:strike?(strike.age<.065?4:strike.age<.125?5:strike.age<.25?6:7):null,direction:strike?Math.sign(Math.sin(strike.yaw)*W.right.x+Math.cos(strike.yaw)*W.right.z):0,shake:save.calm?0:impactPower*(impactPulse/.23)**2*Math.sin((.23-impactPulse)*58),progress:strike?strike.age:0}:null);if(state!=='home')placeMarks(state==='play'?dt:0);
   if(ts>toastUntil&&$('toast').textContent)$('toast').textContent='';requestAnimationFrame(loop)
 }
 home();

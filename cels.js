@@ -27,7 +27,7 @@ const Cels=(()=>{
       uv.setXY(0,x,y);uv.setXY(1,x+.25,y);uv.setXY(2,x,y-.5);uv.setXY(3,x+.25,y-.5);uv.needsUpdate=true}
     card.material=material(u.name,flash)
   }
-  function dog(breed,wear){const g=actor('run-'+breed,2.16),hand=new T.Group();g.add(hand);
+  function dog(breed,wear){const g=actor((Rush.profile.scooter?'ride-':'run-')+breed,2.16),hand=new T.Group();g.add(hand);
     const wardrobe=new T.Group();g.add(wardrobe);const anchors={bucket:[.02,1.72,.53],cap:[.02,1.7,.54],mask:[.11,1.42,.34],scarf:[.05,1.13,.34],cape:[-.22,1.02,.65],bag:[-.03,.86,.55]};
     for(const id of Object.values(wear)){if(!anchors[id])continue;const [x,y,h]=anchors[id],part=Paper.accessory(id,h);part.position.set(x,y,id==='cape'?-.015:.025);wardrobe.add(part)}
     return {g,hand,wardrobe,cels:true}
