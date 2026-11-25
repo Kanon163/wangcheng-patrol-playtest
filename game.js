@@ -120,7 +120,30 @@ function addObj(kind,name,pos,mesh,height=1,tint=''){
 }
 function floating(text,x,z,height=1.15,life=.75){const el=document.createElement('span');el.className='float';el.textContent=text;$('marks').append(el);fx.push({el,x,z,height,age:0,life})}
 function instruction(txt,sec=3){$('hint').textContent=txt;tipUntil=elapsed+sec}
+let loadAttempt=0;
+async function loadScene(title,names,start){
+  const attempt=++loadAttempt;state='loading';music(false);
+  $('hud').hidden=true;$('home').hidden=true;$('toast').textContent='';
+  options('素材加载',title,'准备图片 0 / '+names.length,[]);
+  let count=0;
+  try{
+    await Promise.all(names.map(async name=>{
+      await GameImages.load(name);
+      if(attempt===loadAttempt&&state==='loading')$('desc').textContent='准备图片 '+(++count)+' / '+names.length
+    }))
+  }catch(error){
+    if(attempt!==loadAttempt)return;
+    state='loadError';options('素材加载','图片未加载成功',error.message+'，请检查网络后重试。',[
+      ['重新加载',()=>loadScene(title,names,start)]]);
+    return
+  }
+  if(attempt===loadAttempt)start()
+}
 function begin(id){
+  if(state==='loading')return;unlock();
+  return loadScene('正在准备街区',GameImages.level(id,save.breed,gear.scooter),()=>startLevel(id))
+}
+function startLevel(id){
   last=performance.now();unlock();clearMarks();stopInput();close();mode=id;state='play';elapsed=0;left=modes[id][2];kills=0;inspected=0;energy=100;beat=1;cool=0;hit=0;spawn=.2;combo=0;proofs=[];
   p={x:0,z:0,yaw:.48};district=W.buildStage(id);mistakes=0;crowdDecks=[[],[]];strike=null;freeze=impactPulse=0;bufferSwing=false;[p.x,p.z]=id==='rush'?Street.nodes[0]:Districts.free(0,0);if(id==='rush')p.yaw=Math.PI/2;W.equip(id==='rush'?gear.weapon:save.weapon);bird=id!=='rush'&&save.talent==='bird'?W.bird():null;talentClock=3;W.snap(p);$('home').hidden=true;$('hud').hidden=false;$('modeName').textContent=district.name+' · '+modes[id][1];$('toast').textContent='';
   const spots=shuffle([[-9,-5],[-4,3],[.6,-.4],[5,5],[10,-3],[2,9]]).map(([x,z])=>Districts.free(x+rand(-1,1),z+rand(-.8,.8)));
@@ -146,7 +169,9 @@ function begin(id){
     $('modeName').textContent='敌潮 · 第 '+wave+' 关';
     instruction(wave<4?'认准不文明行为再出锤，每锤消耗10能量。':'大个子需要连续击中，留意剩余能量。',4)
   }
-  hud()
+  hud();
+  W.animate(0,p,false,0,id==='rush'?gear.weapon:save.weapon,null);
+  last=performance.now();if(document.hidden)pause()
 }
 function walkTo(o){if(!o||state!=='play')return;unlock();stopInput();queued=o;
   if(dist(p,o)<1.10)interact(o);else instruction('小狗正在赶往'+o.name,1.3)}
@@ -417,6 +442,7 @@ addEventListener('resize',layoutControls);
 addEventListener('keydown',e=>{const k=e.key.toLowerCase();if(state==='play'&&['arrowup','arrowdown','arrowleft','arrowright','w','a','s','d',' ','escape'].includes(k)){e.preventDefault();keys.add(k);if(!e.repeat&&k===' ')action();if(k==='escape')pause()}});
 addEventListener('keyup',e=>keys.delete(e.key.toLowerCase()));addEventListener('blur',()=>{stopInput();pause()});document.addEventListener('visibilitychange',()=>{if(document.hidden)pause()});
 let last=performance.now();function loop(ts){
+  if(state==='loading'||state==='loadError'){last=ts;requestAnimationFrame(loop);return}
   const wall=Math.max(0,(ts-last)/1000);let dt=Math.min(.08,wall);last=ts;if(state==='play'&&mode==='rush'&&freeze>0){freeze=Math.max(0,freeze-wall);dt=0}let moving=false;
   if(state==='play'){elapsed+=wall;left-=wall;hit=Math.max(0,hit-dt);cool=Math.max(0,cool-dt);if(mode!=='rush')energy=Math.min(100,energy+dt*(9+save.skill*2));
     if(left<=0&&mode==='rush'){finish(false)}
@@ -430,6 +456,6 @@ let last=performance.now();function loop(ts){
   W.animate(state==='home'||state==='play'?dt:0,p,moving,Math.min(1,hit/.38),mode==='rush'?gear.weapon:save.weapon,mode==='rush'?{step:strike?(strike.age<.065?4:strike.age<.125?5:strike.age<.25?6:7):null,direction:strike?Math.sign(Math.sin(strike.yaw)*W.right.x+Math.cos(strike.yaw)*W.right.z):0,shake:save.calm?0:impactPower*(impactPulse/.23)**2*Math.sin((.23-impactPulse)*58),progress:strike?strike.age:0}:null);if(state!=='home')placeMarks(state==='play'?dt:0);
   if(ts>toastUntil&&$('toast').textContent)$('toast').textContent='';requestAnimationFrame(loop)
 }
-home();
+loadScene('正在打开巡查站',Object.keys(Paper.breeds),home);
 requestAnimationFrame(loop)
 })();

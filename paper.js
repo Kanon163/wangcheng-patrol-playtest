@@ -10,8 +10,7 @@ const Paper = (() => {
     const texture=new T.Texture();texture.colorSpace=T.SRGBColorSpace;
     const m=new T.MeshBasicMaterial({map:texture,transparent:true,alphaTest:.12,depthWrite:true,side:T.DoubleSide,toneMapped:false});
     materials.set(id,m);
-    const img=window.patrolHost?.createImage?window.patrolHost.createImage():new Image();
-    img.onload=()=>{texture.image=img;texture.needsUpdate=true};img.src='art/'+id+'.png';return m
+    GameImages.bind(texture,id);return m
   }
   function sheet(id,h){const g=new T.PlaneGeometry(h*ratios[id],h);const mesh=new T.Mesh(g,mat(id));mesh.userData.baked=true;return mesh}
   function npc(id){const g=new T.Group(),card=sheet(id,1.7);card.position.y=.86;g.add(card);return g}

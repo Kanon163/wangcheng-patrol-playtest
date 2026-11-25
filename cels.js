@@ -5,7 +5,7 @@ const Cels=(()=>{
     if(flash){const m=material(name).clone();m.onBeforeCompile=shader=>{shader.fragmentShader=shader.fragmentShader.replace('#include <map_fragment>','#include <map_fragment>\ndiffuseColor.rgb=mix(diffuseColor.rgb,vec3(1.),.89);')};m.customProgramCacheKey=()=>'chalk';cache.set(key,m);return m}
     const texture=new T.Texture();texture.colorSpace=T.SRGBColorSpace;texture.minFilter=T.LinearFilter;texture.generateMipmaps=name.startsWith('shop-');if(texture.generateMipmaps){texture.minFilter=T.LinearMipmapLinearFilter;texture.anisotropy=4}
     const m=new T.MeshBasicMaterial({map:texture,transparent:true,alphaTest:.09,toneMapped:false,side:T.DoubleSide});cache.set(key,m);
-    const img=window.patrolHost?.createImage?window.patrolHost.createImage():new Image();img.onload=()=>{texture.image=img;texture.needsUpdate=true};img.src='art/'+name+'.png';return m
+    GameImages.bind(texture,name);return m
   }
   const masks=new Map();
   function visiblePixel(name,uv){
