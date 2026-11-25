@@ -872,6 +872,7 @@ function settings(){
 }
 function dressed(){persist();W.outfit(save.breed,{});W.equip(gear.weapon)}
 const gear=Rush.profile;
+const missedIncidents=[];
 let wave=1,goalCount=0,spawned=0;
 function shop(message=''){
   const price=gear.levels[gear.weapon]*2,ridePrice=(gear.scooter+1)*6;
@@ -938,7 +939,7 @@ function startLevel(id){
     addObj('proof','问目击者',spots[4],W.citizen('quiet'),2,'clue').fact='目击者：“'+other.item+'的那位一直排在我身后，我可以替这位作证。”';
     instruction('有人插队！点线索搜证，点名字问话。',5)
   }else{
-    wave=gear.stage;const rules=Rush.rules(wave);goalCount=rules.count;left=rules.seconds;energy=Rush.capacity();spawned=0;
+    wave=gear.stage;const rules=Rush.rules(wave);goalCount=rules.count;left=rules.seconds;energy=Rush.capacity();spawned=0;missedIncidents.length=0;
     W.goal(Street.checkpoints.length);
     for(let i=0;i<goalCount;i++)addMob(false,true);
     for(let i=0;i<5;i++)addMob(true);
@@ -1006,9 +1007,16 @@ function stepFoot(actor,dx,dz,steer){
   }
   return false
 }
-function addMob(opening=false,incident=false){
+function replacementNode(missed){
+  const candidates=Street.nodes.map(([x,z],i)=>({x,z,i})).filter(n=>n.i!==missed.origin&&dist(n,missed)>6);
+  const score=n=>Math.min(dist(n,p),12)-Math.abs(dist(n,missed)-13)*.5-
+    (mobs.some(m=>m.bad&&m.origin===n.i)?6:0)+rand(0,4);
+  return candidates.map(n=>({id:n.i,score:score(n)})).sort((a,b)=>b.score-a.score)[0]?.id
+}
+function addMob(opening=false,incident=false,missed=null){
   const slot=spawned%Math.min(Street.checkpoints.length,Math.ceil(goalCount/2));
-  const node=Street.checkpoints[slot],start=incident?node:opening&&mobs.filter(m=>!m.bad).length<2?0:Math.floor(rand(0,Street.nodes.length));
+  const node=missed?replacementNode(missed):Street.checkpoints[slot],start=incident?node:opening&&mobs.filter(m=>!m.bad).length<2?0:Math.floor(rand(0,Street.nodes.length));
+  if(start===undefined)return false;
   const [sx,sz]=Street.nodes[start],lane=rand(-.72,.72),bad=incident,deck=crowdDecks[bad?1:0];
   if(!deck.length)deck.push(...shuffle([0,1,2,3,4,5]));
   const type=deck.pop();
@@ -1021,11 +1029,12 @@ function addMob(opening=false,incident=false){
   const footpath=bad?lane:(lane<0?-1:1)*rand(.75,1.17);
   const mesh=W.pedestrian((bad?'rogue-':'local-')+type),next=Street.neighbor(start,-1);
   const m={mesh,x,z,type,bad,incident,origin:start,node:start,next,lane:footpath,age:0,speed:rand(.82,1.38),wait:rand(0,.65),phase:rand(0,8),facing:1,reaction:0,done:false,visits:0};
-  m.nextVisit=rand(2,7);
-  m.hp=incident&&wave>=4&&spawned%2===0?3:1;
+  m.nextVisit=incident?(wave<4?rand(17,25):rand(11,19)):rand(2,7);
+  m.hideAt=m.nextVisit;
+  m.hp=missed?missed.strength:incident&&wave>=4&&spawned%2===0?3:1;m.strength=m.hp;
   if(m.hp>1)mesh.scale.setScalar(1.32);
-  if(incident)spawned++;
-  mobs.push(m);W.place(mesh,x,z)
+  if(incident&&!missed)spawned++;
+  mobs.push(m);W.place(mesh,x,z);return true
 }
 
 function swing(){
@@ -1055,7 +1064,7 @@ function visitBuilding(m,dt){
     m.entering=Math.min(1,m.entering+dt*1.8);
     const t=m.entering,door=m.door;
     m.x=m.fromX+(door.fx-m.fromX)*t;m.z=m.fromZ+(door.fz-m.fromZ)*t;
-    m.mesh.scale.setScalar(1-t*.92);m.done=t===1;return true
+    m.mesh.scale.setScalar((m.strength>1?1.32:1)*(1-t*.92));m.done=t===1;return true
   }
   if(!m.door&&m.age>=m.nextVisit){
     m.nextVisit=m.age+rand(3,6);
@@ -1077,7 +1086,7 @@ function visitBuilding(m,dt){
     m.visitDelay=Math.hypot(x-m.x,z-m.z)<length-.003?0:m.visitDelay+dt;
     if(m.visitDelay>1.4){m.door=null;m.path=null;m.nextVisit=m.age+rand(2,4)}
   }
-  W.pedestrianPose(m,Math.floor(m.phase*6)%(m.type>=3?4:3),false,0,false);return true
+  W.pedestrianPose(m,Math.floor(m.phase*6)%(m.type>=3?4:m.bad?2:3),false,0,false);return true
 }
 function survival(dt,wall){
   impactPulse=Math.max(0,impactPulse-wall);
@@ -1088,7 +1097,14 @@ function survival(dt,wall){
   spawn-=dt;if(spawn<=0){if(mobs.filter(m=>!m.bad).length<7)addMob();spawn=rand(3.8,5.6)}
   for(const m of mobs){
     m.age+=dt;m.phase+=dt;
-    if(!m.bad&&!m.reaction&&visitBuilding(m,dt)){W.place(m.mesh,m.x,m.z);if(m.done)W.dispose(m.mesh);continue}
+    if(!m.reaction&&m.hp>0&&visitBuilding(m,dt)){
+      W.place(m.mesh,m.x,m.z);
+      if(m.done){
+        if(m.bad)missedIncidents.push({origin:m.origin,x:m.x,z:m.z,strength:m.strength});
+        W.dispose(m.mesh)
+      }
+      continue
+    }
     if(m.reaction>0){m.reaction=Math.max(0,m.reaction-dt);const dx=m.pushX*dt*2.2,dz=m.pushZ*dt*2.2;
       stepFoot(m,dx,dz,false);
       const squash=m.reaction>.33,frame=m.type>=3?(squash?4:m.reaction>.16?5:6):(m.bad?2:4)+(squash?0:1);
@@ -1121,7 +1137,8 @@ function survival(dt,wall){
     if(m.done)W.dispose(m.mesh)
   }
   mobs=mobs.filter(m=>!m.done);
-  if(spawned<goalCount)addMob(false,true)
+  if(spawned<goalCount)addMob(false,true);
+  if(missedIncidents.length&&addMob(false,true,missedIncidents[0]))missedIncidents.shift()
 }
 function direction(x,z){
   const dx=x-p.x,dz=z-p.z,screenX=dx*W.right.x+dz*W.right.z,screenY=dx*W.down.x+dz*W.down.z;
@@ -1144,8 +1161,10 @@ function patrolHint(){
 }
 function hud(){
   if(mode==='rush'){
-    const target=mobs.filter(m=>m.bad&&m.hp>0).sort((a,b)=>dist(p,a)-dist(p,b))[0];
-    $('objective').textContent=target?'发现线索 '+direction(target.x,target.z)+' '+Math.ceil(dist(p,target))+'m':'巡查中';
+    const target=mobs.filter(m=>m.bad&&m.hp>0&&!m.entering).sort((a,b)=>dist(p,a)-dist(p,b))[0];
+    const remaining=target?Math.ceil(target.hideAt-target.age):0;
+    const clue=remaining<=0?'正在逃离':remaining<=5?'将逃离 '+remaining+'s':'发现线索';
+    $('objective').textContent=target?clue+' '+direction(target.x,target.z)+' '+Math.ceil(dist(p,target))+'m':'巡查中';
     $('time').textContent='续航 '+Math.ceil(Math.max(0,left))+'s';$('status').textContent='制止 '+kills+'/'+goalCount;
     $('charge').textContent='能量 '+energy;
     $('time').dataset.low=String(left<=15);$('charge').dataset.low=String(energy<=20);
