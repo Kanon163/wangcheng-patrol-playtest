@@ -121,7 +121,7 @@ function addObj(kind,name,pos,mesh,height=1,tint=''){
 function floating(text,x,z,height=1.15,life=.75){const el=document.createElement('span');el.className='float';el.textContent=text;$('marks').append(el);fx.push({el,x,z,height,age:0,life})}
 function instruction(txt,sec=3){$('hint').textContent=txt;tipUntil=elapsed+sec}
 function begin(id){
-  unlock();clearMarks();stopInput();close();mode=id;state='play';elapsed=0;left=modes[id][2];kills=0;inspected=0;energy=100;beat=1;cool=0;hit=0;spawn=.2;combo=0;proofs=[];
+  last=performance.now();unlock();clearMarks();stopInput();close();mode=id;state='play';elapsed=0;left=modes[id][2];kills=0;inspected=0;energy=100;beat=1;cool=0;hit=0;spawn=.2;combo=0;proofs=[];
   p={x:0,z:0,yaw:.48};district=W.buildStage(id);mistakes=0;crowdDecks=[[],[]];strike=null;freeze=impactPulse=0;bufferSwing=false;[p.x,p.z]=id==='rush'?Street.nodes[0]:Districts.free(0,0);if(id==='rush')p.yaw=Math.PI/2;W.equip(id==='rush'?gear.weapon:save.weapon);bird=id!=='rush'&&save.talent==='bird'?W.bird():null;talentClock=3;W.snap(p);$('home').hidden=true;$('hud').hidden=false;$('modeName').textContent=district.name+' · '+modes[id][1];$('toast').textContent='';
   const spots=shuffle([[-9,-5],[-4,3],[.6,-.4],[5,5],[10,-3],[2,9]]).map(([x,z])=>Districts.free(x+rand(-1,1),z+rand(-.8,.8)));
   if(id==='search'){
@@ -169,7 +169,7 @@ function interact(o){
   }
   hud()
 }
-function resume(){close();state='play';stopInput()}
+function resume(){close();last=performance.now();state='play';stopInput()}
 function finish(win){
   if(mode==='rush'){
     if(state!=='play')return;state='result';stopInput();music(false);tone(win?700:160,.18);
