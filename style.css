@@ -2,3 +2,20 @@
 #options:has(.art-choice){grid-template-columns:1fr 1fr}#options button.art-choice{height:88px;padding:58px 3px 3px;background-repeat:no-repeat;background-size:auto 49px;background-position:center 5px;background-color:#fffaf0;font-size:13px}#options:has(.art-choice) button:not(.art-choice){grid-column:1/-1}
 @media (pointer:coarse),(max-width:700px){#act{min-width:116px;height:76px;font-size:22px;border-radius:20px}#stick{width:96px;height:96px}#stick i{width:42px;height:42px}#pause{width:58px;height:54px;font-size:21px}#hint{bottom:calc(122px + env(safe-area-inset-bottom))}.mission{min-height:55px}.navfoot button,#options button{min-height:48px;font-size:15px}.marker{min-width:48px;min-height:42px;font-size:15px}}
 
+
+/* 朋友试玩的出勤面板 */
+.pick{background:#fff1d8;border:2px solid var(--ink);border-radius:16px;padding:10px 12px;box-shadow:3px 4px var(--ink)}
+.pick>b{display:block;font-size:15px;letter-spacing:.1em;margin-bottom:7px}
+#dogs{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+#dogs button{border:2px solid #c9bba4;border-radius:10px;background-color:#fff9e9;background-repeat:no-repeat;background-position:center 4px;background-size:auto 54px;padding:60px 0 4px;font-size:14px}
+#dogs button[aria-pressed=true]{border-color:var(--ink);background-color:#ffdb78;box-shadow:inset 0 -4px #f1ae36}
+#start{padding:11px 20px;background:var(--sun);border:3px solid var(--ink);border-radius:12px;font-size:23px;box-shadow:3px 4px var(--ink)}
+#start span{padding-left:10px}
+#stick,#act{touch-action:none;min-width:0;clip-path:ellipse(50% 50% at 50% 50%);border-radius:50%}
+#stick{pointer-events:auto;bottom:calc(env(safe-area-inset-bottom) + 8px);border:3px solid #fff4cebb;background:radial-gradient(ellipse,#2a56576b 38%,#23494987 39%,#17454c64 65%,#fff3c57a 67%,#23474d8f 70%);color:#fff3cc}
+#stick i{height:42%;width:42%;border:3px solid #13383ec9;background:#ebedd2ae;box-shadow:0 3px 0 #243f4266}
+#act{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0;background:radial-gradient(ellipse at 37% 25%,#ffdc71 0%,#ffbd3f 48%,#f18c26 72%,#d36b1a 95%);border:5px solid #42291e;box-shadow:inset 0 0 0 3px #ffe7a4,inset 0 -9px 0 #ae5726;color:#402518;font-size:clamp(19px,4vw,28px);font-weight:1000;line-height:1.05}
+#act::before{content:"";width:52%;height:49%;background:center/contain no-repeat url("art/hammer-key.png");pointer-events:none}
+#act:active{filter:brightness(1.14);transform:scale(.96)}
+#hint{bottom:auto;top:calc(max(12px,env(safe-area-inset-top)) + 95px);padding:5px 10px;font-size:12px}
+@media(max-height:480px){#dogs button{background-size:auto 34px;padding-top:38px}.pick{padding:4px 8px}.pick>b{margin:0}#start{padding:4px 12px}}

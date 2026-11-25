@@ -46,7 +46,7 @@ const World = (() => {
   let stage=grp(scene),actors=grp(scene),dog,rig,hammer,home=true,t=0,district,look='shiba',clothes={};
   const streetShade=new T.MeshBasicMaterial({color:0x293c46,transparent:true,opacity:.18,depthWrite:false});
   let buildings=[],stroke,stamp;
-  function goal(index){if(!stamp)return;stamp.visible=index<3;if(stamp.visible){const [x,z]=Street.nodes[Street.checkpoints[index]];stamp.position.set(x,.095,z)}}
+  function goal(index){if(!stamp)return;stamp.visible=index<Street.checkpoints.length;if(stamp.visible){const [x,z]=Street.nodes[Street.checkpoints[index]];stamp.position.set(x,.095,z)}}
   function makeBuilding(x,z,w,d,h,id,[name,accent],landmark){
     const b=grp(stage);b.position.set(x,0,z);buildings.push({b,x,z,w,d,h});
     cube(b,'#977e6c',0,h/2,0,w,h,d);
@@ -82,7 +82,8 @@ const World = (() => {
     const cast=new T.Mesh(new T.PlaneGeometry(w+.18,d+.17),streetShade);cast.rotation.x=-Math.PI/2;cast.position.set(x+.47,.103,z+.27);cast.userData.baked=true;stage.add(cast);
     bake(b)
   }
-  function pedestrian(id){const g=grp(actors);shadow(g,0,0,.37,.26);const card=Cels.actor(id,2.12);g.add(card);face(card);g.userData.paper=card;
+  function pedestrian(id){const g=grp(actors);shadow(g,0,0,.37,.26);const inkHeight=({'local-0':144,'local-1':138,'local-2':138,'rogue-0':196,'rogue-1':198,'rogue-2':185,'rogue-3':192,'rogue-4':192,'rogue-5':192,'local-3':192,'local-4':192,'local-5':192})[id]||192;
+    const size=2.2*208/inkHeight,card=Cels.actor(id,size);card.userData.restY=card.userData.card.position.y;g.add(card);face(card);g.userData.paper=card;
     const form=new T.Shape();for(let i=0;i<16;i++){const a=i*Math.PI/8,r=i%2?.20:(i%4?.42:.66);if(!i)form.moveTo(r,0);else form.lineTo(Math.cos(a)*r,Math.sin(a)*r)}form.closePath();
     const spark=grp(card),burst=new T.ShapeGeometry(form);
     for(const [size,color,depth] of [[1,'#543524',0],[.86,'#ffb541',.009],[.56,'#fff4c3',.019]]){
@@ -92,7 +93,7 @@ const World = (() => {
     const card=m.mesh.userData.paper,art=card.userData.card,age=.52-m.reaction;
     const bounce=m.reaction>0?Math.exp(-age*10)*Math.cos(age*24):0;
     Cels.frame(card,frame,flash);card.scale.x=m.facing||1;
-    art.scale.set(1+bounce*.16,1-bounce*.11,1);art.position.y=2.12*.475*art.scale.y;
+    art.scale.set(1+bounce*.16,1-bounce*.11,1);art.position.y=card.userData.restY*art.scale.y;
     card.position.x=shake*.068;art.rotation.z=shake*.048;
     const star=m.mesh.userData.spark;star.visible=spark;
     if(spark){star.scale.setScalar(.71+Math.min(1,age/.105)*.35);star.rotation.z=-.19+age*.95}
