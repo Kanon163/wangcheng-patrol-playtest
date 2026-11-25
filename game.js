@@ -21,13 +21,36 @@ function tone(freq=390,len=.08,kind='triangle',vol=.035){
 }
 const combatAudio=new Map();
 let musicSource=null,musicGain=null,musicStart=0,musicOffset=0,hostMusic=false;
-function loadSounds(){
-  if(!audio)return;
-  for(const name of ['swish','thump','knock','knock-deep','stamp','patrol-loop']){
-    if(combatAudio.has(name))continue;combatAudio.set(name,null);
-    fetch(window.patrolSounds?.[name]||'art/'+name+(name==='patrol-loop'?'.mp3':'.wav')).then(r=>{if(!r.ok)throw Error();return r.arrayBuffer()})
-      .then(data=>audio.decodeAudioData(data)).then(buffer=>combatAudio.set(name,buffer)).catch(()=>combatAudio.delete(name))
+const soundLoads=new Map();
+function loadSound(name){
+  if(!soundLoads.has(name)){
+    const url=window.patrolSounds?.[name]||'art/'+name+(name==='patrol-loop'?'.mp3':'.wav');
+    const request=fetch(url).then(r=>{if(!r.ok)throw Error();return r.arrayBuffer()})
+      .then(data=>audio.decodeAudioData(data)).then(buffer=>{combatAudio.set(name,buffer);return buffer})
+      .catch(()=>{soundLoads.delete(name);return null});
+    soundLoads.set(name,request)
   }
+  return soundLoads.get(name)
+}
+function loadSounds(){
+  if(audio)for(const name of ['swish','thump','knock','knock-deep','stamp','patrol-loop','patrol-win','patrol-loss'])loadSound(name)
+}
+let resultSource=null,resultSequence=0;
+function stopResultMusic(){
+  resultSequence++;
+  if(window.patrolHost){window.patrolHost.resultMusic?.(null);return}
+  if(resultSource){resultSource.stop();resultSource.disconnect();resultSource=null}
+}
+async function playResultMusic(win){
+  stopResultMusic();
+  if(!save.sound||!save.music)return;
+  const name=win?'patrol-win':'patrol-loss',sequence=resultSequence;
+  if(window.patrolHost){window.patrolHost.resultMusic?.(name);return}
+  if(!audio)return;
+  const buffer=await loadSound(name);
+  if(!buffer||sequence!==resultSequence||state!=='result')return;
+  resultSource=audio.createBufferSource();resultSource.buffer=buffer;
+  resultSource.connect(audio.destination);resultSource.start()
 }
 function music(playing){
   const enabled=Boolean(playing&&save.music&&save.sound);
@@ -147,7 +170,7 @@ async function loadScene(title,names,start){
   }
 }
 function begin(id){
-  if(state==='loading')return;unlock();
+  if(state==='loading')return;stopResultMusic();unlock();
   return loadScene('正在准备街区',GameImages.level(id,save.breed,gear.scooter),()=>startLevel(id))
 }
 function startLevel(id){
@@ -178,6 +201,12 @@ function startLevel(id){
   }
   hud();
   W.animate(0,p,false,0,id==='rush'?gear.weapon:save.weapon,null);
+  if(id==='rush'&&wave<=3){
+    state='briefing';
+    options('敌潮 · 第 '+wave+' 关','本关巡查目标',
+      '胜利：在 '+left+' 秒内制止 '+goalCount+' 起不文明行为。\n失败：续航时间到，或挥锤能量用尽时仍未完成目标。\n本关有 '+energy+' 点能量，每锤消耗 10 点，空挥和误击也会消耗。',
+      [['开始巡查',resume]])
+  }
   last=performance.now();if(document.hidden)pause()
 }
 function walkTo(o){if(!o||state!=='play')return;unlock();stopInput();queued=o;
@@ -202,11 +231,11 @@ function interact(o){
   hud()
 }
 function resume(){close();last=performance.now();state='play';stopInput()}
-function finish(win){
+function finish(win,cause){
   if(mode==='rush'){
-    if(state!=='play')return;state='result';stopInput();music(false);tone(win?700:160,.18);
+    if(state!=='play')return;state='result';stopInput();music(false);playResultMusic(win);
     if(win){gear.stage=Math.max(gear.stage,wave+1);Rush.store()}
-    const watch=window.patrolHost?.watchReward,why=win?'街区清理完成':left<=0?'续航时间耗尽':'锤子能量耗尽';
+    const watch=window.patrolHost?.watchReward,why=win?'巡查胜利':cause==='energy'?'巡查失败 · 能量耗尽':'巡查失败 · 续航时间到';
     function result(msg=''){
       const retry=async()=>{if(state!=='result'||!watch)return;state='rewardPending';
         options('敌潮','等待激励视频','完整观看后重开本关',[]);
@@ -215,7 +244,7 @@ function finish(win){
       };
       const choices=win?[['进入第 '+gear.stage+' 关',()=>begin('rush')]]:[[watch?'看广告重来':'激励视频暂不可用',retry,!watch]];
       choices.push(['装备升级',()=>shop()]);
-      options('敌潮 · 第 '+wave+' 关',why,[msg,'已处理 '+kills+'/'+goalCount+'　误击 '+mistakes,'本关获得 '+kills*2+' 代币，已存入钱包'].filter(Boolean).join('\n'),choices)
+      options('敌潮 · 第 '+wave+' 关',why,[msg,win?'全部不文明行为已制止。':'还有 '+(goalCount-kills)+' 起不文明行为未制止。','已处理 '+kills+'/'+goalCount+'　误击 '+mistakes,'本关获得 '+kills*2+' 代币，已存入钱包'].filter(Boolean).join('\n'),choices)
     }
     result();return
   }
@@ -320,7 +349,7 @@ function visitBuilding(m,dt){
 }
 function survival(dt,wall){
   impactPulse=Math.max(0,impactPulse-wall);
-  if(strike){strike.age+=dt;if(strike.age>=.125&&!strike.contact){strike.age=.125;strike.contact=true;contact();if(kills===goalCount||energy<=0){finish(kills===goalCount);return}}
+  if(strike){strike.age+=dt;if(strike.age>=.125&&!strike.contact){strike.age=.125;strike.contact=true;contact();if(kills===goalCount||energy<=0){finish(kills===goalCount,'energy');return}}
     if(strike.age>(strike.tired?.56:gear.weapon==='黄瓜棒'?.33:.43)){strike=null;cool=.025;}}
   if(freeze>0)return;
   if(!strike&&cool<=0&&bufferSwing){bufferSwing=false;swing()}
@@ -502,13 +531,13 @@ let last=performance.now();function loop(ts){
   if(state==='loading'||state==='loadError'){last=ts;requestAnimationFrame(loop);return}
   const wall=Math.max(0,(ts-last)/1000);let dt=Math.min(.08,wall);last=ts;if(state==='play'&&mode==='rush'&&freeze>0){freeze=Math.max(0,freeze-wall);dt=0}let moving=false;
   if(state==='play'){elapsed+=wall;left-=wall;hit=Math.max(0,hit-dt);cool=Math.max(0,cool-dt);if(mode!=='rush')energy=Math.min(100,energy+dt*(9+save.skill*2));
-    if(left<=0&&mode==='rush'){finish(false)}
+    if(left<=0&&mode==='rush'){finish(false,'time')}
     if(state==='play'&&!chase&&dt>0&&(!strike||strike.age>.25))moving=move(dt);if(state==='play'){
       talentClock-=dt;
       if(bird){bird.position.set(p.x-.7,1.22+Math.sin(elapsed*5)*.13,p.z+.18);bird.rotation.y=p.yaw;
         if(talentClock<=0){energy=Math.min(100,energy+18);talentClock=5;floating('补给',p.x-.6,p.z,1.5)}}
       
-      if(mode==='rush')survival(dt,wall);else scan(dt);if(left<=0&&state==='play'&&!chase)finish(false);hud()}}
+      if(mode==='rush')survival(dt,wall);else scan(dt);if(left<=0&&state==='play'&&!chase)finish(false,'time');hud()}}
   music(state==='play'&&mode==='rush'&&!document.hidden);
   W.animate(state==='home'||state==='play'?dt:0,p,moving,Math.min(1,hit/.38),mode==='rush'?gear.weapon:save.weapon,mode==='rush'?{step:strike?(strike.age<.065?4:strike.age<.125?5:strike.age<.25?6:7):null,direction:strike?Math.sign(Math.sin(strike.yaw)*W.right.x+Math.cos(strike.yaw)*W.right.z):0,shake:save.calm?0:impactPower*(impactPulse/.23)**2*Math.sin((.23-impactPulse)*58),progress:strike?strike.age:0}:null);if(state!=='home')placeMarks(state==='play'?dt:0);
   if(ts>toastUntil&&$('toast').textContent)$('toast').textContent='';requestAnimationFrame(loop)
