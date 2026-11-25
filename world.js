@@ -44,29 +44,59 @@ const World = (() => {
   const shadowGeo=new T.CircleGeometry(1,40),shadowMat=new T.MeshBasicMaterial({color:'#344538',transparent:true,opacity:.19,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-1});
   function shadow(g,x,z,w,d){const disc=new T.Mesh(shadowGeo,shadowMat);disc.rotation.x=-Math.PI/2;disc.scale.set(w,d,1);disc.position.set(x,.038,z);g.add(disc)}
   let stage=grp(scene),actors=grp(scene),dog,rig,hammer,home=true,t=0,district,look='shiba',clothes={};
+  const streetShade=new T.MeshBasicMaterial({color:0x293c46,transparent:true,opacity:.18,depthWrite:false});
   let buildings=[],stroke,stamp;
   function goal(index){if(!stamp)return;stamp.visible=index<3;if(stamp.visible){const [x,z]=Street.nodes[Street.checkpoints[index]];stamp.position.set(x,.095,z)}}
-  function makeBuilding(x,z,w,d,h,id,[name,accent]){
+  function makeBuilding(x,z,w,d,h,id,[name,accent],landmark){
     const b=grp(stage);b.position.set(x,0,z);buildings.push({b,x,z,w,d,h});
     cube(b,'#977e6c',0,h/2,0,w,h,d);
     const front=Cels.material('shop-'+id);
     const facade=(width,xx,zz,rot)=>{const m=new T.Mesh(new T.PlaneGeometry(width,h),front);m.userData.baked=true;m.rotation.y=rot;m.position.set(xx,h/2,zz);b.add(m)};
-    facade(w,0,d/2+.012,0);facade(d,w/2+.012,0,Math.PI/2);
+    facade(w,0,d/2+.012,0);
+    // A quieter side elevation frames the illustrated shopfront at each corner.
+    cube(b,'#cfbba2',w/2+.015,h/2,0,.06,h,d);
+    for(const zz of [-d*.27,d*.22]){
+      cube(b,'#535f5c',w/2+.057,h*.69,zz,.08,h*.34,.92);
+      cube(b,'#85a3a2',w/2+.11,h*.69,zz,.05,h*.27,.76);
+      cube(b,'#d6c29f',w/2+.15,h*.69,zz,.05,h*.31,.06);
+      cube(b,'#746958',w/2+.17,h*.52,zz,.25,.085,1.08)}
+    cube(b,'#897e6b',w/2+.10,.22,0,.16,.44,d);
+    cube(b,'#657873',w/2+.12,h*.47,-d*.43,.12,h*.93,.11);
     cube(b,'#53675e',0,h+.04,0,w+.20,.13,d+.18);cube(b,'#aa9a76',0,h+.15,0,w-.1,.14,d-.1);
     cube(b,accent,0,h*.51,d*.5+.14,w+.13,.14,.55);label(b,name,0,h*.64,d*.5+.05,w*.63,.43,accent,'#fff0ca');
-    const roof=id%2?'#997665':'#82928a';
-    for(let k=0;k<5;k++)cube(b,roof,0,h+.228,-d*.4+k*d*.2,w-.20,.04,.045);
+    StreetArt.plane(b,id%2?'slate':'terracotta',0,h+.232,0,w-.15,d-.15,3.4);
     cube(b,'#7c8884',-w*.27,h+.40,-d*.18,.83,.46,.70);
     for(let k=0;k<4;k++)cube(b,'#495b59',-w*.27-.26+k*.17,h+.642,-d*.18,.08,.036,.55);
     if(id%2===0){cube(b,'#536566',w*.25,h+.33,-d*.15,1.07,.19,.78);cube(b,'#a3bfbd',w*.25,h+.45,-d*.15,.87,.08,.57)}
     else{cyl(b,'#b5a188',w*.25,h+.60,-d*.15,.41,.88,.41);cyl(b,'#677974',w*.25,h+1.05,-d*.15,.45,.09,.45)}
+    if(landmark){
+      const zf=d/2;cube(b,accent,0,h*.48,zf+.28,w+.18,.16,.84);
+      for(let k=0;k<12;k++){const bx=(k-5.5)*w/12;cube(b,k%2?accent:'#f3dbac',bx,h*.48+.045,zf+.42,w/12,.115,.83).rotation.x=.12;
+        cube(b,k%2?accent:'#f3dbac',bx,h*.48-.09,zf+.82,w/12,.18,.075)}
+      cube(b,'#344b47',w*.41,h*.85,zf+.30,.095,.085,.73);StreetArt.emblem(b,id,w*.41,h*.77-.25,zf+.66);
+      if(id===0){for(const px of [-.55,.40]){cyl(b,'#9b6846',px,.37,zf+.33,.39,.58,.39);cyl(b,'#dbb16c',px,.68,zf+.33,.43,.11,.43);
+        for(let k=-1;k<2;k++)ball(b,'#fff0c8',px+k*.18,.77,zf+.33,.12,.10,.12)}}
+      if(id===2){for(let k=0;k<3;k++){const px=(k-1)*.68;cube(b,'#ae7952',px,.28,zf+.26,.63,.50,.54);
+        for(const dx of [-.14,.14])ball(b,k%2?'#edb544':'#d98337',px+dx,.56,zf+.28,.14,.14,.13)}}
+    }
+    const cast=new T.Mesh(new T.PlaneGeometry(w+.18,d+.17),streetShade);cast.rotation.x=-Math.PI/2;cast.position.set(x+.47,.103,z+.27);cast.userData.baked=true;stage.add(cast);
     bake(b)
   }
   function pedestrian(id){const g=grp(actors);shadow(g,0,0,.37,.26);const card=Cels.actor(id,2.12);g.add(card);face(card);g.userData.paper=card;
     const form=new T.Shape();for(let i=0;i<16;i++){const a=i*Math.PI/8,r=i%2?.20:(i%4?.42:.66);if(!i)form.moveTo(r,0);else form.lineTo(Math.cos(a)*r,Math.sin(a)*r)}form.closePath();
-    const spark=new T.Mesh(new T.ShapeGeometry(form),material('#ffe48b'));spark.userData.baked=true;card.add(spark);spark.position.set(-.27,1.01,.09);spark.visible=false;g.userData.spark=spark;return g}
-  function pedestrianPose(m,frame,flash,shake,spark){const card=m.mesh.userData.paper;Cels.frame(card,frame,flash);card.scale.x=m.facing||1;
-    card.position.x=shake*.075;card.userData.card.rotation.z=shake*.038;m.mesh.userData.spark.visible=spark}
+    const spark=grp(card),burst=new T.ShapeGeometry(form);
+    for(const [size,color,depth] of [[1,'#543524',0],[.86,'#ffb541',.009],[.56,'#fff4c3',.019]]){
+      const ray=new T.Mesh(burst,material(color));ray.scale.setScalar(size);ray.position.z=depth;spark.add(ray)}
+    spark.children[0].userData.baked=true;spark.position.set(-.27,1.01,.09);spark.visible=false;g.userData.spark=spark;return g}
+  function pedestrianPose(m,frame,flash,shake,spark){
+    const card=m.mesh.userData.paper,art=card.userData.card,age=.52-m.reaction;
+    const bounce=m.reaction>0?Math.exp(-age*10)*Math.cos(age*24):0;
+    Cels.frame(card,frame,flash);card.scale.x=m.facing||1;
+    art.scale.set(1+bounce*.16,1-bounce*.11,1);art.position.y=2.12*.475*art.scale.y;
+    card.position.x=shake*.068;art.rotation.z=shake*.048;
+    const star=m.mesh.userData.spark;star.visible=spark;
+    if(spark){star.scale.setScalar(.71+Math.min(1,age/.105)*.35);star.rotation.z=-.19+age*.95}
+  }
   function person(color,item,variant=0){return citizen(Paper.behaviors[3+({red:0,blue:1,green:2}[color]??variant%3)])}
   function citizen(id){const g=grp(actors);shadow(g,0,0,.37,.28);const paper=Paper.npc(id);g.add(paper);g.userData.paper=paper;face(paper);return g}
   function face(card){card.quaternion.copy(camera.quaternion)}
@@ -115,7 +145,8 @@ const World = (() => {
     cameraUpdate(dt);face(rig.g);
     if(moving){const vx=Math.sin(p.yaw)*.78-Math.cos(p.yaw)*.625;if(Math.abs(vx)>.12)rig.g.scale.x=Math.sign(vx)}
     if(rig.cels){
-      Cels.dogPose(rig,t,moving,combat?.step);stroke.visible=combat?.step===5||combat?.step===6;stroke.rotation.z=combat?.step===5?.86:-.53;
+      Cels.dogPose(rig,t,moving,combat?.step);const arc=Math.min(1,Math.max(0,((combat?.progress||0)-.055)/.21));
+      stroke.visible=arc>0&&arc<1;stroke.rotation.z=.98-1.78*(1-(1-arc)**3);stroke.scale.setScalar(.80+.33*arc);stroke.material.opacity=.87*(1-arc*arc);
       if(combat?.direction)rig.g.scale.x=combat.direction;
       const shake=combat?.shake||0;if(shake){camera.position.x+=shake*.065;camera.position.z-=shake*.043;camera.updateMatrixWorld()}
       for(const {b,x,z,w,d,h} of buildings){const dx=x-p.x,dz=z-p.z,depth=.625*dx+.781*dz;
